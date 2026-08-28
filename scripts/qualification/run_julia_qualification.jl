@@ -111,6 +111,10 @@ function main()
         include(joinpath(ROOT,"test","hts_extended_tests.jl"))
     end
 
+    run_step!(receipt,"hdf5_interchange_tests") do
+        include(joinpath(ROOT,"test","hdf5_interchange_tests.jl"))
+    end
+
     run_step!(receipt,"radiant_em_analytic") do
         run_subqualification("run_radiant_em_analytic.jl")
     end
