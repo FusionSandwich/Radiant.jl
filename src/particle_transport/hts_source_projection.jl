@@ -76,6 +76,15 @@ function _energy_group_map(
     return mapping
 end
 
+"""
+    _solver_quadrature(solver, geometry)
+
+Return the native Radiant quadrature together with a three-component unit-vector embedding used by
+the coupling schemas. A one-dimensional SN quadrature stores only the transport direction cosine
+`μ`; its unused transverse component is chosen deterministically as `sqrt(1-μ^2)`. This embedding
+preserves the physically relevant normal cosine while satisfying the source schema's unit-vector
+invariant. No azimuthal information is implied for a one-dimensional solve.
+"""
 function _solver_quadrature(solver::SN,geometry::Geometry)
     Ndims = get_dimension(geometry)
     Qdims = get_quadrature_dimension(solver,Ndims)
@@ -86,7 +95,9 @@ function _solver_quadrature(solver::SN,geometry::Geometry)
         Qdims,
     )
     if Ω isa Vector{Float64}
-        Ω = [Ω,zeros(Float64,length(Ω)),zeros(Float64,length(Ω))]
+        μ = Float64.(Ω)
+        η = sqrt.(max.(0.0,1.0 .- μ.^2))
+        Ω = [μ,η,zeros(Float64,length(μ))]
     end
     return Ω,Float64.(w),hcat(Ω[1],Ω[2],Ω[3]),Qdims
 end
@@ -429,8 +440,10 @@ function project_volume_source(
     volume_rtol::Real=1.0e-10,
     volume_atol_cm3::Real=1.0e-14,
 )
-    geometry.is_build || error("Geometry must be built before volume-source projection.")
-    get_tag(source.particle) == get_tag(get_particle(solver)) || error("Source and solver particles differ.")
+    geometry.is_build || error("Geometry must be built before projecting a volume source.")
+    get_tag(source.particle) == get_tag(get_particle(solver)) || error(
+        "Volume-source particle does not match the selected solver.",
+    )
 
     group_map = _energy_group_map(source.energy_edges_eV,cross_sections,source.particle)
     stored_particle = _stored_particle(cross_sections,source.particle)
@@ -439,21 +452,18 @@ function project_volume_source(
     Np,Mn,Dn,_,_ = angular_polynomial_basis(
         Ω,w,get_legendre_order(solver),get_angular_boltzmann(solver),Qdims,
     )
-    direction_map = source.angular_representation == :ordinates ? _direction_map(
-        source.directions,source.quadrature_weights,target_directions,w;
-        direction_atol=direction_atol,
-    ) : Int64[]
+    direction_map = source.angular_representation == :ordinates ?
+        _direction_map(
+            source.directions,source.quadrature_weights,target_directions,w;
+            direction_atol=direction_atol,
+        ) : Int64[]
 
     if source.angular_representation == :moments
         get(source.provenance,"angular_basis","") == "radiant-volume-moments/v1" || error(
-            "Moment sources must declare angular_basis=radiant-volume-moments/v1.",
+            "Moment source must declare angular_basis=radiant-volume-moments/v1.",
         )
-        size(source.values,3) == Np || error("Moment coefficient count does not match Radiant.")
-        get(source.provenance,"zeroth_moment_index","") == "1" || error(
-            "Radiant coefficient 1 must be declared as the zeroth moment.",
-        )
-        get(source.provenance,"zeroth_moment_is_angle_integrated","false") == "true" || error(
-            "Radiant coefficient 1 must be declared angle-integrated.",
+        size(source.values,3) == Np || error(
+            "Moment-source coefficient count does not match the selected Radiant basis.",
         )
     end
 
@@ -467,16 +477,17 @@ function project_volume_source(
 
     for source_voxel in eachindex(source.voxel_ids)
         ix,iy,iz = _linear_voxel_index(geometry,source.voxel_ids[source_voxel])
-        voxel_volume = _geometry_voxel_volume(geometry,ix,iy,iz)
+        expected_volume = _geometry_voxel_volume(geometry,ix,iy,iz)
         isapprox(
-            source.voxel_volumes_cm3[source_voxel],voxel_volume;
+            source.voxel_volumes_cm3[source_voxel],expected_volume;
             rtol=volume_rtol,atol=volume_atol_cm3,
-        ) || error("Volume-source voxel volume does not match the geometry.")
+        ) || error("Volume-source voxel volume does not match the Radiant geometry.")
 
         for source_group in axes(source.values,2)
             target_group = group_map[source_group]
             moments = zeros(Float64,Np)
             target_density = 0.0
+
             if source.angular_representation == :isotropic
                 target_density = source.values[source_voxel,source_group,1]
                 moments[1] = target_density
@@ -490,37 +501,44 @@ function project_volume_source(
                 target_density = sum(w .* discrete_source)
             else
                 moments .= view(source.values,source_voxel,source_group,:)
-                target_density = moments[1]
+                get(source.provenance,"zeroth_moment_is_angle_integrated","false") == "true" || error(
+                    "Native moment projection requires zeroth_moment_is_angle_integrated=\"true\".",
+                )
+                index = try
+                    parse(Int,get(source.provenance,"zeroth_moment_index",""))
+                catch
+                    error("Native moment projection requires a valid zeroth_moment_index.")
+                end
+                1 ≤ index ≤ Np || error("zeroth_moment_index lies outside the Radiant basis.")
+                target_density = moments[index]
             end
 
-            target_density ≥ -rate_atol || error("Angle-integrated source density is negative.")
-            if abs(target_density) ≤ rate_atol
-                target_density = 0.0
-            end
             reconstruction = Mn * moments
-            reconstructed_density = sum(w .* reconstruction)
+            projected_density = sum(w .* reconstruction)
             if target_density > rate_atol
-                reconstructed_density > 0.0 || error("Projected scalar source is nonpositive.")
-                moments .*= target_density/reconstructed_density
+                projected_density > 0.0 || error(
+                    "Volume projection has nonpositive reconstructed scalar source for a nonzero source.",
+                )
+                moments .*= target_density/projected_density
                 reconstruction = Mn * moments
-            elseif abs(reconstructed_density) > rate_atol
-                error("Projection generated a scalar source from a zero source group.")
+            elseif abs(projected_density) > rate_atol
+                error("Volume projection generated scalar source from a zero source group.")
             end
 
             scale = max(1.0,maximum(abs.(reconstruction)))
             minimum(reconstruction) ≥ -Float64(positivity_atol)*scale || error(
-                "Volume projection produced negative angular-source lobes.",
+                "Volume projection produced negative angular-source lobes; increase angular order or change basis.",
             )
-            reconstructed_density = sum(w .* reconstruction)
-            isapprox(reconstructed_density,target_density;rtol=rate_rtol,atol=rate_atol) || error(
-                "Volume-source scalar rate failed closure after projection.",
+            projected_density = sum(w .* reconstruction)
+            isapprox(projected_density,target_density;rtol=rate_rtol,atol=rate_atol) || error(
+                "Volume-source scalar-rate closure failed after angular projection.",
             )
 
             for coefficient in 1:Np
                 projected_source[target_group,coefficient,1,ix,iy,iz] += moments[coefficient]
             end
-            target_rate[target_group] += target_density * voxel_volume
-            projected_rate[target_group] += reconstructed_density * voxel_volume
+            target_rate[target_group] += target_density * expected_volume
+            projected_rate[target_group] += projected_density * expected_volume
         end
     end
 
@@ -532,21 +550,33 @@ function project_volume_source(
     return projected_source,receipt
 end
 
-function add_source(source::Source,specification::Boundary_Angular_Current_Source)
+"""
+    add_source(this::Source, source::Boundary_Angular_Current_Source)
+
+Project and add a conservative tabulated boundary source to an existing Radiant particle source.
+Returns a `Boundary_Projection_Receipt`.
+"""
+function add_source(this::Source,source::Boundary_Angular_Current_Source)
     projected,receipt = project_boundary_source(
-        specification,source.cross_sections,source.geometry,source.solver,
+        source,this.cross_sections,this.geometry,this.solver,
     )
-    _merge_surface_source!(source,projected)
+    _merge_surface_source!(this,projected)
     return receipt
 end
 
-function add_source(source::Source,specification::Anisotropic_Volume_Source)
+"""
+    add_source(this::Source, source::Anisotropic_Volume_Source)
+
+Project and add a voxel-resolved angular volume source to an existing Radiant particle source.
+Returns a `Volume_Projection_Receipt`.
+"""
+function add_source(this::Source,source::Anisotropic_Volume_Source)
     projected,receipt = project_volume_source(
-        specification,source.cross_sections,source.geometry,source.solver,
+        source,this.cross_sections,this.geometry,this.solver,
     )
-    size(projected) == size(source.volume_sources) || error(
-        "Projected volume-source tensor is incompatible with the initialized source.",
+    size(projected) == size(this.volume_sources) || error(
+        "Projected volume-source array is incompatible with the initialized Radiant source.",
     )
-    source.volume_sources .+= projected
+    this.volume_sources .+= projected
     return receipt
 end
