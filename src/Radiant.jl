@@ -9,6 +9,9 @@ module Radiant
     using JLD2
     using SpecialFunctions
 
+    # Load version-gated compatibility methods before any source files are evaluated.
+    include("tools/julia_compat.jl")
+
     #----
     # Include files
     #----
