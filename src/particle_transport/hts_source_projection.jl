@@ -358,7 +358,7 @@ function project_boundary_source(
         direction_atol=direction_atol,
     )
 
-    Np,Mn,Dn,nplus_to_n,n_to_nplus,_,_ = surface_angular_polynomial_basis(
+    Np,Mn,Dn,nplus_to_n,_,_,_ = surface_angular_polynomial_basis(
         Ω,
         w,
         get_legendre_order(solver),
@@ -390,7 +390,6 @@ function project_boundary_source(
         surface_index[patch] = boundary
         surface_cell[patch] = cell
         incoming_solver_indices = nplus_to_n[boundary]
-        local_direction_index = n_to_nplus[boundary]
 
         for source_group in axes(source.angular_flux,2)
             radiant_group = group_map[source_group]
@@ -482,13 +481,23 @@ function _linear_voxel_index(geometry::Geometry,voxel_id::Int64)
     return Tuple(cartesian)
 end
 
+function _geometry_voxel_volume(geometry::Geometry,ix::Int64,iy::Int64,iz::Int64)
+    if get_dimension(geometry) == 1
+        return geometry.volume_per_voxel[ix]
+    elseif get_dimension(geometry) == 2
+        return geometry.volume_per_voxel[ix,iy]
+    end
+    return geometry.volume_per_voxel[ix,iy,iz]
+end
+
 """
     project_volume_source(source, cross_sections, geometry, solver)
 
 Project isotropic, ordinate, or native Radiant moment sources into the SN volume-source array.
 Voxel identifiers are one-based Julia linear indices into `(Nx,Ny,Nz)`. Source voxel volumes must
-match the built Radiant geometry. Scalar source rate and nonnegative reconstructed angular source
-are protected; negative moment coefficients themselves are allowed.
+match the built Radiant geometry. One- and two-dimensional calculations use Radiant's existing
+unit-transverse-measure convention. Scalar source rate and nonnegative reconstructed angular
+source are protected; negative higher moment coefficients themselves are allowed.
 """
 function project_volume_source(
     source::Anisotropic_Volume_Source,
@@ -536,6 +545,10 @@ function project_volume_source(
         if size(source.values,3) != Np
             error("Moment source coefficient count does not match the selected Radiant basis.")
         end
+        if get(source.provenance,"zeroth_moment_index","") != "1" ||
+           get(source.provenance,"zeroth_moment_is_angle_integrated","false") != "true"
+            error("Radiant moment sources must declare coefficient 1 as the angle-integrated zeroth moment.")
+        end
     end
 
     _,_,Nm = get_schemes(solver,geometry,get_is_full_coupling(solver))
@@ -548,12 +561,7 @@ function project_volume_source(
 
     for source_voxel in eachindex(source.voxel_ids)
         ix,iy,iz = _linear_voxel_index(geometry,source.voxel_ids[source_voxel])
-        expected_volume = geometry.volume_per_voxel[ix,iy,iz]
-        if get_dimension(geometry) == 1
-            expected_volume = geometry.volume_per_voxel[ix]
-        elseif get_dimension(geometry) == 2
-            expected_volume = geometry.volume_per_voxel[ix,iy]
-        end
+        expected_volume = _geometry_voxel_volume(geometry,ix,iy,iz)
         if !isapprox(
             source.voxel_volumes_cm3[source_voxel],
             expected_volume;
@@ -581,18 +589,13 @@ function project_volume_source(
                 target_density = sum(w .* discrete_source)
             else
                 moments .= view(source.values,source_voxel,source_group,:)
-                if get(source.provenance,"zeroth_moment_is_angle_integrated","false") != "true"
-                    error("Native moment projection requires zeroth_moment_is_angle_integrated=\"true\".")
-                end
-                index = try
-                    parse(Int,get(source.provenance,"zeroth_moment_index",""))
-                catch
-                    error("Native moment projection requires a valid zeroth_moment_index.")
-                end
-                if index < 1 || index > Np
-                    error("zeroth_moment_index lies outside the Radiant basis.")
-                end
-                target_density = moments[index]
+                target_density = moments[1]
+            end
+
+            if target_density < -rate_atol
+                error("The angle-integrated volume-source density must be nonnegative.")
+            elseif abs(target_density) ≤ rate_atol
+                target_density = 0.0
             end
 
             reconstruction = Mn * moments
