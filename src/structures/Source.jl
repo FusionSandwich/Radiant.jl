@@ -1,330 +1,246 @@
 """
     Source
 
-Structure used to describe sources for a given particle.
-
+Structure used to describe volume and boundary sources for one transported particle.
 """
 mutable struct Source
+    name                 ::Union{Missing,String}
+    particle             ::Union{Missing,Particle}
+    volume_sources       ::Array{Float64}
+    surface_sources      ::Array{Union{Array{Float64},Float64}}
+    normalization_factor ::Float64
+    cross_sections       ::Cross_Sections
+    geometry             ::Geometry
+    solver               ::Solver
 
-    # Variable(s)
-    name                       ::Union{Missing,String}
-    particle                   ::Union{Missing,Particle}
-    volume_sources             ::Array{Float64}
-    surface_sources            ::Array{Union{Array{Float64},Float64}}
-    normalization_factor       ::Float64
-    cross_sections             ::Cross_Sections
-    geometry                   ::Geometry
-    solver         ::Solver
-
-    # Constructor(s)
-    function Source(particle::Particle,cross_sections::Cross_Sections,geometry::Geometry,solver::Solver)
+    function Source(
+        particle::Particle,
+        cross_sections::Cross_Sections,
+        geometry::Geometry,
+        solver::Solver,
+    )
         this = new()
         this.name = missing
         this.particle = particle
-        this.normalization_factor = 0
+        this.normalization_factor = 0.0
         this.cross_sections = cross_sections
         this.geometry = geometry
         this.solver = solver
-        initalize_sources(this,cross_sections,geometry,solver)
+        initialize_sources(this,cross_sections,geometry,solver)
         return this
     end
 end
 
-# Method(s)
 """
-    initalize_sources(this::Source,cross_sections::Cross_Sections,geometry::Geometry,solver::Solver)
+    initialize_sources(this, cross_sections, geometry, solver)
 
-Initialize volume and boundary sources.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-- `cross_sections::Cross_Sections` : cross-sections library.
-- `geometry::Geometry` : geometry.
-- `solver::Solver` : discrete ordinates solver.
-
-# Output Argument(s)
-N/A
-
+Initialize zero volume- and surface-source arrays in the angular and spatial basis selected by the
+solver. `initalize_sources` remains as a compatibility alias for the historical misspelling.
 """
-function initalize_sources(this::Source,cross_sections::Cross_Sections,geometry::Geometry,solver::Solver)
-
-    # Data extraction and validation
+function initialize_sources(
+    this::Source,
+    cross_sections::Cross_Sections,
+    geometry::Geometry,
+    solver::Solver,
+)
     particle = this.particle
-    if get_tag(particle) ∉ get_tag.(cross_sections.particles) error(string("No cross sections available for ",particle," particle.")) end
-    index = findfirst(x -> get_tag(x) == get_tag(particle),cross_sections.particles)
+    if get_tag(particle) ∉ get_tag.(cross_sections.particles)
+        error("No cross sections are available for particle $(get_tag(particle)).")
+    end
+    index = findfirst(
+        candidate -> get_tag(candidate) == get_tag(particle),
+        cross_sections.particles,
+    )
     Ng = cross_sections.number_of_groups[index]
     Nx = geometry.number_of_voxels["x"]
     Ndims = geometry.dimension
-    if Ndims ≥ 2 Ny = geometry.number_of_voxels["y"] else Ny = 1 end
-    if Ndims ≥ 3 Nz = geometry.number_of_voxels["z"] else Nz = 1 end
-    _,_,Nm = solver.get_schemes(geometry,solver.get_is_full_coupling())
+    Ny = Ndims ≥ 2 ? geometry.number_of_voxels["y"] : 1
+    Nz = Ndims ≥ 3 ? geometry.number_of_voxels["z"] : 1
+    _,_,Nm = get_schemes(solver,geometry,get_is_full_coupling(solver))
 
-    # Angular discretization
     if solver isa SN
-        Qdims = solver.get_quadrature_dimension(Ndims)
-        Ω,w = quadrature(solver.quadrature_order,solver.quadrature_type,Qdims)
-        if typeof(Ω) == Vector{Float64} Ω = [Ω,0*Ω,0*Ω] end
-        P,_,_,_ = angular_polynomial_basis(Ω,w,solver.get_legendre_order(),solver.get_angular_boltzmann(),Qdims)
-    elseif solver isa GN
-        polynomial_basis = solver.get_polynomial_basis(Ndims)
-        Lp = solver.get_legendre_order()
-        if polynomial_basis == "legendre"
-            P = Lp+1
-        else
-            P = (Lp+1)^2
+        Qdims = get_quadrature_dimension(solver,Ndims)
+        Ω,w = quadrature(
+            get_quadrature_order(solver),
+            get_quadrature_type(solver),
+            Ndims,
+            Qdims,
+        )
+        if Ω isa Vector{Float64}
+            Ω = [Ω,zeros(Float64,length(Ω)),zeros(Float64,length(Ω))]
         end
+        P,_,_,_,_ = angular_polynomial_basis(
+            Ω,
+            w,
+            get_legendre_order(solver),
+            get_angular_boltzmann(solver),
+            Qdims,
+        )
+    elseif solver isa GN
+        polynomial_basis = get_polynomial_basis(solver,Ndims)
+        Lp = get_legendre_order(solver)
+        P = polynomial_basis == "legendre" ? Lp+1 : (Lp+1)^2
     elseif solver isa CP
-        # Azimuthally-symmetric (m = 0) Legendre expansion of the volume flux.
-        P = solver.get_legendre_order()+1
+        P = get_legendre_order(solver)+1
     else
-        error("No methods available for $(get_type(particle)) particle.")
+        error("No source initialization is available for the selected solver.")
     end
 
-    # Initialize sources
-    L = 0 
-    this.volume_sources = zeros(Ng,P,Nm[5],Nx,Ny,Nz)
-    this.surface_sources = Array{Union{Array{Float64},Float64}}(undef,Ng,L+1,2*Ndims)
-    for ig in range(1,Ng), l in range(0,L)
+    this.volume_sources = zeros(Float64,Ng,P,Nm[5],Nx,Ny,Nz)
+    this.surface_sources = _initialize_legacy_surface_array(Ng,1,Ndims,Nx,Ny,Nz)
+    return this
+end
+
+initalize_sources(args...) = initialize_sources(args...)
+
+function _initialize_legacy_surface_array(
+    Ng::Int64,
+    Np::Int64,
+    Ndims::Int64,
+    Nx::Int64,
+    Ny::Int64,
+    Nz::Int64,
+)
+    sources = Array{Union{Array{Float64},Float64}}(undef,Ng,Np,2*Ndims)
+    for igroup in 1:Ng, coefficient in 1:Np
         if Ndims == 1
-            for i in range(1,2) this.surface_sources[ig,l+1,i] = 0.0 end
+            sources[igroup,coefficient,1] = 0.0
+            sources[igroup,coefficient,2] = 0.0
         elseif Ndims == 2
-            for i in range(1,2) this.surface_sources[ig,l+1,i] = zeros(Ny) end
-            for i in range(3,4) this.surface_sources[ig,l+1,i] = zeros(Nx) end
+            sources[igroup,coefficient,1] = zeros(Float64,Ny)
+            sources[igroup,coefficient,2] = zeros(Float64,Ny)
+            sources[igroup,coefficient,3] = zeros(Float64,Nx)
+            sources[igroup,coefficient,4] = zeros(Float64,Nx)
         elseif Ndims == 3
-            for i in range(1,2) this.surface_sources[ig,l+1,i] = zeros(Ny,Nz) end
-            for i in range(3,4) this.surface_sources[ig,l+1,i] = zeros(Nx,Nz) end
-            for i in range(5,6) this.surface_sources[ig,l+1,i] = zeros(Nx,Ny) end
+            sources[igroup,coefficient,1] = zeros(Float64,Ny,Nz)
+            sources[igroup,coefficient,2] = zeros(Float64,Ny,Nz)
+            sources[igroup,coefficient,3] = zeros(Float64,Nx,Nz)
+            sources[igroup,coefficient,4] = zeros(Float64,Nx,Nz)
+            sources[igroup,coefficient,5] = zeros(Float64,Nx,Ny)
+            sources[igroup,coefficient,6] = zeros(Float64,Nx,Ny)
+        else
+            error("Cartesian source arrays are available only in one, two, or three dimensions.")
         end
     end
+    return sources
 end
 
 """
-    set_particle(this::Source,particle::String)
+    set_particle(this::Source, particle::String)
 
-Set the source particle.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-- `particle::String` : particle.
-
-# Output Argument(s)
-N/A
-
+Legacy string setter retained for compatibility.
 """
 function set_particle(this::Source,particle::String)
-    if lowercase(particle) ∉ ["photons","electrons","positrons"] error("Unknown particle type") end
+    if lowercase(particle) ∉ ["photons","electrons","positrons"]
+        error("Unknown particle type.")
+    end
     this.particle = particle
 end
 
 """
-    add_source(this::Source,source::Volume_Source)
+    add_source(this::Source, source::Volume_Source)
 
-Add a volume source to the source structure.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-- `source::Volume_Source` : volume source.
-
-# Output Argument(s)
-N/A
-
+Add a legacy isotropic, single-group volume source.
 """
 function add_source(this::Source,source::Volume_Source)
     particle = source.particle
     Qv,norm = volume_source(particle,source,this.cross_sections,this.geometry)
-    this.volume_sources[:,1,1,:,:,:] += Qv[:,1,1,:,:,:]
+    this.volume_sources[:,1,1,:,:,:] .+= Qv[:,1,1,:,:,:]
     source.normalization_factor += norm
+    return nothing
 end
 
 """
-    add_source(this::Source,surface_sources::Surface_Source)
+    add_source(this::Source, source::Surface_Source)
 
-Add a surface source to the source structure.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-- `source::Surface_Source` : surface source.
-
-# Output Argument(s)
-N/A
-
+Add a legacy monodirectional surface source.
 """
-function add_source(this::Source,surface_sources::Surface_Source)
-
-    # Data extraction and validation
-    particle = surface_sources.particle
-    if get_tag(particle) ∉ get_tag.(this.cross_sections.particles) error(string("No cross sections available for ",get_type(particle)," particle.")) end
+function add_source(this::Source,surface_source_specification::Surface_Source)
+    particle = surface_source_specification.particle
+    if get_tag(particle) ∉ get_tag.(this.cross_sections.particles)
+        error("No cross sections are available for $(get_type(particle)).")
+    end
     Ndims = this.geometry.dimension
     Nx = this.geometry.number_of_voxels["x"]
-    if Ndims ≥ 2 Ny = this.geometry.number_of_voxels["y"] else Ny = 1 end
-    if Ndims ≥ 3 Nz = this.geometry.number_of_voxels["z"] else Nz = 1 end
-    if get_tag(particle) != get_tag(this.solver.particle) error(string("No methods available for ",get_type(particle)," particle.")) end
+    Ny = Ndims ≥ 2 ? this.geometry.number_of_voxels["y"] : 1
+    Nz = Ndims ≥ 3 ? this.geometry.number_of_voxels["z"] : 1
+    if get_tag(particle) != get_tag(this.solver.particle)
+        error("The source particle does not match the selected solver.")
+    end
 
-    # Compute and format the surface source for transport solver
+    Q_new,norm = surface_source(
+        particle,
+        surface_source_specification,
+        this.cross_sections,
+        this.geometry,
+        this.solver,
+    )
+    _merge_legacy_surface_source!(this,Q_new,Nx,Ny,Nz)
+    surface_source_specification.normalization_factor += norm
+    return nothing
+end
+
+function _merge_legacy_surface_source!(
+    this::Source,
+    Q_new,
+    Nx::Int64,
+    Ny::Int64,
+    Nz::Int64,
+)
     Q_old = this.surface_sources
-    Q_new,norm = surface_source(particle,surface_sources,this.cross_sections,this.geometry,this.solver)
-
-    # Add it to the source object
     dims_new = size(Q_new)
     dims_old = size(Q_old)
-    if (dims_new[1] != dims_old[1]) || (dims_new[3] != dims_old[3]) error("Number of groups and/or dimension of sources are not coherent.") end
+    if dims_new[1] != dims_old[1] || dims_new[3] != dims_old[3]
+        error("Surface sources have incompatible energy-group or boundary dimensions.")
+    end
     Ng = dims_old[1]
-    L_new = dims_new[2] - 1
-    L_old = dims_old[2] - 1
-    if L_new > L_old
-        Q_block = Array{Union{Array{Float64},Float64}}(undef,Ng,L_new-L_old,2*Ndims)
-        for ig in range(1,Ng), l in range(0,L_new-L_old-1)
-            if Ndims == 1
-                for i in range(1,2) Q_block[ig,l+1,i] = 0.0 end
-            elseif Ndims == 2
-                for i in range(1,2) Q_block[ig,l+1,i] = zeros(Ny) end
-                for i in range(3,4) Q_block[ig,l+1,i] = zeros(Nx) end
-            elseif Ndims == 3
-                for i in range(1,2) Q_block[ig,l+1,i] = zeros(Ny,Nz) end
-                for i in range(3,4) Q_block[ig,l+1,i] = zeros(Nx,Nz) end
-                for i in range(5,6) Q_block[ig,l+1,i] = zeros(Nx,Ny) end
-            end
-        end
-        Q_old = cat(Q_old,Q_block; dims=2)
+    Ndims = div(dims_old[3],2)
+    Np = max(dims_old[2],dims_new[2])
+    Q_merged = _initialize_legacy_surface_array(Ng,Np,Ndims,Nx,Ny,Nz)
+
+    for igroup in 1:Ng, coefficient in 1:dims_old[2], boundary in 1:dims_old[3]
+        Q_merged[igroup,coefficient,boundary] += Q_old[igroup,coefficient,boundary]
     end
-    for ig in range(1,Ng), l in range(0,L_new), i in range(1,2*Ndims)
-        Q_old[ig,l+1,i] += Q_new[ig,l+1,i]
+    for igroup in 1:Ng, coefficient in 1:dims_new[2], boundary in 1:dims_new[3]
+        Q_merged[igroup,coefficient,boundary] += Q_new[igroup,coefficient,boundary]
     end
-    this.surface_sources = Q_old
-    surface_sources.normalization_factor += norm
+    this.surface_sources = Q_merged
+    return this
 end
 
 """
-    add_volume_source(this::Source,source::Array{Float64})
+    add_volume_source(this::Source, source::Array{Float64})
 
-Set a volume source.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-- `source::Array{Float64}` : volume source.
-
-# Output Argument(s)
-N/A
-
+Replace the volume-source tensor with a preformatted source.
 """
 function add_volume_source(this::Source,source::Array{Float64})
     this.volume_sources = source
+    return this
 end
 
-"""
-    get_surface_sources(this::Source)
-
-Get the surface sources.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-
-# Output Argument(s)
-- `surface_sources::Array{Array{Float64}}` : surfaces sources.
+get_surface_sources(this::Source) = this.surface_sources
+get_volume_sources(this::Source) = this.volume_sources
+get_normalization_factor(this::Source) = this.normalization_factor
+get_particle(this::Source) = this.particle
 
 """
-function get_surface_sources(this::Source)
-    return this.surface_sources
-end
+    Base.:+(source1::Source, source2::Source)
 
-"""
-    get_volume_sources(this::Source)
-
-Get the volume sources.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-
-# Output Argument(s)
-- `volume_sources::Array{Float64}` : volume sources.
-
-"""
-function get_volume_sources(this::Source)
-    return this.volume_sources
-end
-
-"""
-    get_normalization_factor(this::Source)
-
-Get the source normalization factor.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-
-# Output Argument(s)
-- `normalization_factor::Float64` : normalization factor.
-
-"""
-function get_normalization_factor(this::Source)
-    return this.normalization_factor
-end
-
-"""
-    get_particle(this::Source)
-
-Get the source particle.
-
-# Input Argument(s)
-- `this::Source` : source structure.
-
-# Output Argument(s)
-- `particle::Particle` : particle.
-
-"""
-function get_particle(this::Source)
-    return this.particle
-end 
-
-"""
-    Base.:+(source1::Source,source2::Source)
-
-Combination of two sources.
-
-# Input Argument(s)
-- `source1::Source` : a source structure.
-- `source2::Source` : a source structure.
-
-# Output Argument(s)
-- `source1::Source` : a combination of the two sources.
-
+Merge two formatted sources for the same particle.
 """
 function Base.:+(source1::Source,source2::Source)
-    if get_tag(source1.get_particle()) != get_tag(source2.get_particle()) error("Forbitten addition of different particle sources.") end
-    source1.volume_sources += source2.volume_sources
+    if get_tag(get_particle(source1)) != get_tag(get_particle(source2))
+        error("Sources for different particles cannot be added.")
+    end
+    if size(source1.volume_sources) != size(source2.volume_sources)
+        error("Volume-source arrays are incompatible.")
+    end
+    source1.volume_sources .+= source2.volume_sources
+
     Ndims = source1.geometry.dimension
     Nx = source1.geometry.number_of_voxels["x"]
-    if Ndims ≥ 2 Ny = source1.geometry.number_of_voxels["y"] else Ny = 1 end
-    if Ndims ≥ 3 Nz = source1.geometry.number_of_voxels["z"] else Nz = 1 end
-
-    # Add it to the source object
-    Q_1 = source1.surface_sources
-    Q_2 = source2.surface_sources
-    dims_1 = size(Q_1)
-    dims_2 = size(Q_2)
-    if (dims_1[1] != dims_2[1]) || (dims_1[3] != dims_2[3]) error("Number of groups and/or dimension of sources are not coherent.") end
-    Ng = dims_1[1]
-    Ndims = div(dims_1[3],2)
-    L_1 = dims_1[2] - 1
-    L_2 = dims_2[2] - 1
-    if L_2 > L_1
-        Q_block = Array{Union{Array{Float64},Float64}}(undef,Ng,L_2-L_1,2*Ndims)
-        for ig in range(1,Ng), l in range(0,L_2-L_1-1)
-            if Ndims == 1
-                for i in range(1,2) Q_block[ig,l+1,i] = 0.0 end
-            elseif Ndims == 2
-                for i in range(1,2) Q_block[ig,l+1,i] = zeros(Ny) end
-                for i in range(3,4) Q_block[ig,l+1,i] = zeros(Nx) end
-            elseif Ndims == 3
-                for i in range(1,2) Q_block[ig,l+1,i] = zeros(Ny,Nz) end
-                for i in range(3,4) Q_block[ig,l+1,i] = zeros(Nx,Nz) end
-                for i in range(5,6) Q_block[ig,l+1,i] = zeros(Nx,Ny) end
-            end
-        end
-        Q_1 = cat(Q_1,Q_block; dims=2)
-    end
-    for ig in range(1,Ng), l in range(0,L_2), i in range(1,2*Ndims)
-        Q_1[ig,l+1,i] += Q_2[ig,l+1,i]
-    end
-    source1.surface_sources = Q_1
+    Ny = Ndims ≥ 2 ? source1.geometry.number_of_voxels["y"] : 1
+    Nz = Ndims ≥ 3 ? source1.geometry.number_of_voxels["z"] : 1
+    _merge_legacy_surface_source!(source1,source2.surface_sources,Nx,Ny,Nz)
     return source1
 end
