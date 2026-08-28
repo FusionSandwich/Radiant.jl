@@ -11,7 +11,9 @@ const RECEIPT_PATH = joinpath(RESULT_ROOT,"qualification.toml")
 
 function file_sha256(path::AbstractString)
     isfile(path) || return "missing"
-    return bytes2hex(open(SHA.sha256,path))
+    return open(path,"r") do io
+        bytes2hex(SHA.sha256(io))
+    end
 end
 
 function git_value(arguments...)
@@ -22,10 +24,18 @@ function git_value(arguments...)
     end
 end
 
+function julia_commit()
+    try
+        return string(Base.GIT_VERSION_INFO.commit)
+    catch
+        return "unavailable"
+    end
+end
+
 function write_receipt(receipt)
     mkpath(dirname(RECEIPT_PATH))
     open(RECEIPT_PATH,"w") do io
-        TOML.print(io,receipt;sorted=true)
+        TOML.print(io,receipt)
     end
 end
 
@@ -58,12 +68,12 @@ function main()
     receipt = Dict{String,Any}(
         "schema" => "radiant.julia_qualification/v1",
         "overall_status" => "RUNNING",
-        "started_utc" => string(Dates.now(Dates.UTC)),
+        "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
         "git_commit" => git_value("rev-parse","HEAD"),
         "git_branch" => git_value("rev-parse","--abbrev-ref","HEAD"),
         "julia_version" => string(VERSION),
-        "julia_commit" => string(Base.GIT_VERSION_INFO.commit),
+        "julia_commit" => julia_commit(),
         "kernel" => string(Sys.KERNEL),
         "architecture" => string(Sys.ARCH),
         "threads" => Threads.nthreads(),
@@ -97,7 +107,7 @@ function main()
     end
 
     receipt["overall_status"] = "PASS"
-    receipt["completed_utc"] = string(Dates.now(Dates.UTC))
+    receipt["completed_at"] = string(Dates.now())
     receipt["manifest_sha256_final"] = file_sha256(joinpath(ROOT,"Manifest.toml"))
     write_receipt(receipt)
     println("RADIANT_BUILD_PASS: Julia $(VERSION)")
