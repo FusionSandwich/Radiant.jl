@@ -12,7 +12,8 @@ Supported angular representations are:
   recorded in provenance.
 
 `values` has shape `(voxel, energy group, angular coefficient)` and is never implicitly
-normalized by voxel volume or source rate.
+normalized by voxel volume or source rate. Isotropic and ordinate values must be nonnegative.
+Moment coefficients may be signed; their reconstructed angular source must be checked separately.
 """
 struct Anisotropic_Volume_Source <: Abstract_Radiant_Source
     particle::Particle
@@ -57,6 +58,10 @@ struct Anisotropic_Volume_Source <: Abstract_Radiant_Source
         variance_array = isnothing(variance) ? nothing : Float64.(variance)
         direction_tol = Float64(direction_tolerance)
         source_tol = Float64(source_tolerance)
+        provenance_string = Dict{String,String}()
+        for (key,value) in provenance
+            provenance_string[string(key)] = string(value)
+        end
 
         Nvoxel = length(ids)
         Ngroup = length(edges) - 1
@@ -77,8 +82,11 @@ struct Anisotropic_Volume_Source <: Abstract_Radiant_Source
         if !isfinite(source_tol) || source_tol < 0.0
             error("Source tolerance must be finite and nonnegative.")
         end
-        if any(x -> !isfinite(x) || x < -source_tol, source_values)
-            error("Volume-source values must be finite and nonnegative.")
+        if any(x -> !isfinite(x),source_values)
+            error("Volume-source values must be finite.")
+        end
+        if angular_representation != :moments && any(x -> x < -source_tol,source_values)
+            error("Isotropic and ordinate volume-source values must be nonnegative.")
         end
         source_values[abs.(source_values) .≤ source_tol] .= 0.0
 
@@ -115,14 +123,9 @@ struct Anisotropic_Volume_Source <: Abstract_Radiant_Source
             if size(ordinates,1) != 0 || length(weights) != 0
                 error("Moment sources do not accept explicit quadrature arrays.")
             end
-            if !haskey(provenance,"angular_basis") && !haskey(provenance,:angular_basis)
+            if !haskey(provenance_string,"angular_basis")
                 error("Moment-source provenance must declare an angular_basis.")
             end
-        end
-
-        provenance_string = Dict{String,String}()
-        for (key,value) in provenance
-            provenance_string[string(key)] = string(value)
         end
 
         reaction = isnothing(parent_reaction) ? nothing : String(parent_reaction)
@@ -143,13 +146,22 @@ struct Anisotropic_Volume_Source <: Abstract_Radiant_Source
     end
 end
 
+get_particle(this::Anisotropic_Volume_Source) = this.particle
+get_source_normalization(this::Anisotropic_Volume_Source) = this.normalization
+
 """
     get_volume_source_rate(this::Anisotropic_Volume_Source; physical=false)
 
 Return the angle-integrated source rate per energy group, summed over source voxels. Isotropic
 values are interpreted as angle-integrated source densities. Ordinate values are integrated using
-the supplied quadrature. Moment sources require an explicit downstream basis mapping and are not
-silently reduced to a scalar rate.
+the supplied quadrature.
+
+A moment source is reduced only when provenance declares both:
+
+- `zeroth_moment_index`: one-based coefficient index;
+- `zeroth_moment_is_angle_integrated = "true"`.
+
+This prevents an implicit factor of `2`, `4π`, or a basis-normalization constant.
 """
 function get_volume_source_rate(this::Anisotropic_Volume_Source; physical::Bool=false)
     Nvoxel, Ngroup, Ncoefficient = size(this.values)
@@ -166,7 +178,23 @@ function get_volume_source_rate(this::Anisotropic_Volume_Source; physical::Bool=
                             this.voxel_volumes_cm3[ivoxel]
         end
     else
-        error("A moment source requires an explicit basis-to-scalar mapping.")
+        if get(this.provenance,"zeroth_moment_is_angle_integrated","false") != "true"
+            error("Moment-source scalar-rate extraction requires zeroth_moment_is_angle_integrated=\"true\".")
+        end
+        if !haskey(this.provenance,"zeroth_moment_index")
+            error("Moment-source scalar-rate extraction requires zeroth_moment_index provenance.")
+        end
+        index = try
+            parse(Int,this.provenance["zeroth_moment_index"])
+        catch
+            error("zeroth_moment_index must be a valid one-based integer.")
+        end
+        if index < 1 || index > Ncoefficient
+            error("zeroth_moment_index lies outside the source coefficient dimension.")
+        end
+        for ivoxel in 1:Nvoxel, igroup in 1:Ngroup
+            rate[igroup] += this.values[ivoxel,igroup,index] * this.voxel_volumes_cm3[ivoxel]
+        end
     end
 
     return physical ? apply_normalization(rate,this.normalization) : rate
