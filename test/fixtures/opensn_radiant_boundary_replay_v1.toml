@@ -1,0 +1,27 @@
+schema = "opensn_radiant_boundary_replay/v1"
+classification = "software-verification"
+producer = "analytic OpenSn-shaped fixture"
+particle = "photon"
+source_hash = "analytic-opensn-radiant-v1"
+normalization_basis = "per_history"
+source_rate_per_s = 1.0
+symmetry_factor = 1.0
+energy_edges_eV = [1000.0, 1000000.0]
+quadrature_weights = [1.0, 1.0]
+expected_total_incoming_current = 1.1547005383792515
+
+[patch]
+id = 1
+centroid_cm = [0.0, 0.0, 0.0]
+area_cm2 = 1.0
+normal = [-1.0, 0.0, 0.0]
+tangent_1 = [0.0, 1.0, 0.0]
+tangent_2 = [0.0, 0.0, -1.0]
+
+[[direction]]
+cosines = [-0.5773502691896257, 0.0, 0.0]
+angular_flux = [0.0]
+
+[[direction]]
+cosines = [0.5773502691896257, 0.0, 0.0]
+angular_flux = [2.0]
