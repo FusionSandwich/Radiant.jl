@@ -2,7 +2,7 @@ using Radiant
 using Test
 
 function tape_material_library(stack::Tape_Stack_Definition)
-    tags = unique(layer.material_tag for layer in stack.layers)
+    tags = unique([layer.material_tag for layer in stack.layers])
     materials = Material[]
     for tag in tags
         material = Material(tag)
