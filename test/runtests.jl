@@ -1,6 +1,43 @@
 using Radiant
 using Test
 
+function one_voxel_source_fixture()
+    particle = Photon()
+
+    cross_sections = Cross_Sections()
+    cross_sections.particles = [particle]
+    cross_sections.number_of_particles = 1
+    cross_sections.number_of_groups = [1]
+    cross_sections.energy_boundaries = [[1.0,0.001]] # MeV, high-to-low Radiant convention
+
+    geometry = Geometry()
+    geometry.type = "cartesian"
+    geometry.dimension = 1
+    geometry.axis = ["x"]
+    geometry.number_of_voxels["x"] = 1
+    geometry.voxels_width["x"] = [1.0]
+    geometry.voxels_position["x"] = [0.5]
+    geometry.voxels_boundaries["x"] = [0.0,1.0]
+    geometry.volume_per_voxel = [1.0]
+    geometry.material_per_voxel = ones(Int64,1,1,1)
+    geometry.is_build = true
+
+    solver = SN()
+    Radiant.set_particle(solver,particle)
+    Radiant.set_solver_type(solver,"BTE")
+    Radiant.set_quadrature(solver,"gauss-legendre",2)
+    Radiant.set_legendre_order(solver,1)
+    Radiant.set_angular_boltzmann(solver,"galerkin-d")
+    Radiant.set_scheme(solver,"x","DD",1)
+
+    solvers = Solvers()
+    Radiant.add_solver(solvers,solver)
+
+    Ω,w = Radiant.quadrature(2,"gauss-legendre",1,1)
+    directions = hcat(Ω,zeros(Float64,length(Ω)),zeros(Float64,length(Ω)))
+    return particle,cross_sections,geometry,solver,solvers,directions,w
+end
+
 @testset "Radiant.jl" begin
 
     @testset "Explicit source normalization" begin
@@ -142,16 +179,121 @@ using Test
         @test get_volume_source_rate(source) ≈ [7.0,10.0]
         @test get_volume_source_rate(source;physical=true) ≈ [56.0,80.0]
 
-        moment_values = ones(Float64,1,1,2)
+        signed_moments = reshape([2.0,-0.25],1,1,2)
+        moment_source = Anisotropic_Volume_Source(
+            Photon(),
+            [1],
+            [1.0],
+            [1.0,2.0],
+            :moments,
+            signed_moments,
+            normalization;
+            provenance=Dict(
+                "angular_basis" => "test-basis",
+                "zeroth_moment_index" => "1",
+                "zeroth_moment_is_angle_integrated" => "true",
+            ),
+        )
+        @test get_volume_source_rate(moment_source) ≈ [2.0]
+
         @test_throws ErrorException Anisotropic_Volume_Source(
             Photon(),
             [1],
             [1.0],
             [1.0,2.0],
             :moments,
-            moment_values,
+            signed_moments,
             normalization,
         )
+    end
+
+    @testset "Projection into Radiant source arrays" begin
+        particle,cross_sections,geometry,solver,solvers,directions,w = one_voxel_source_fixture()
+        normalization = Source_Normalization(
+            basis=:per_history,
+            source_rate_per_s=5.0,
+            symmetry_factor=2.0,
+            source_hash="one-voxel-fixture",
+        )
+        normal = [-1.0 0.0 0.0]
+        angular_flux = zeros(Float64,1,1,length(w))
+        for direction in eachindex(w)
+            if dot(view(directions,direction,:),view(normal,1,:)) < 0.0
+                angular_flux[1,1,direction] = 2.0
+            end
+        end
+        boundary_source = Boundary_Angular_Current_Source(
+            particle,
+            [1],
+            [0.0 0.0 0.0],
+            [1.0],
+            normal,
+            [0.0 1.0 0.0],
+            [0.0 0.0 -1.0],
+            [1.0e3,1.0e6],
+            directions,
+            w,
+            angular_flux,
+            normalization,
+        )
+
+        projected_boundary,boundary_receipt = project_boundary_source(
+            boundary_source,
+            cross_sections,
+            geometry,
+            solver,
+        )
+        @test boundary_receipt.energy_group_map == [1]
+        @test boundary_receipt.target_current ≈ boundary_receipt.projected_current atol=1.0e-12
+        @test boundary_receipt.max_relative_error ≤ 1.0e-10
+        @test sum(projected_boundary[1,:,1]) > 0.0
+
+        source_object = Radiant.Source(particle,cross_sections,geometry,solver)
+        receipt_from_add = Radiant.add_source(source_object,boundary_source)
+        @test receipt_from_add isa Boundary_Projection_Receipt
+        @test sum(source_object.surface_sources[1,:,1]) > 0.0
+
+        volume_values = reshape([3.0],1,1,1)
+        volume_source = Anisotropic_Volume_Source(
+            particle,
+            [1],
+            [1.0],
+            [1.0e3,1.0e6],
+            :isotropic,
+            volume_values,
+            normalization;
+            parent_reaction="synthetic-n-to-gamma",
+        )
+        projected_volume,volume_receipt = project_volume_source(
+            volume_source,
+            cross_sections,
+            geometry,
+            solver,
+        )
+        @test volume_receipt.target_rate ≈ [3.0]
+        @test volume_receipt.target_rate ≈ volume_receipt.projected_rate atol=1.0e-12
+        @test volume_receipt.max_relative_error ≤ 1.0e-10
+        @test sum(projected_volume) > 0.0
+
+        fixed_sources = Fixed_Sources(cross_sections,geometry,solvers)
+        Radiant.add_source(fixed_sources,boundary_source)
+        Radiant.add_source(fixed_sources,volume_source)
+        Radiant.build(fixed_sources)
+        @test fixed_sources.is_build
+        @test get_normalization_factor(fixed_sources) == 1.0
+        @test get_source_normalization(fixed_sources).source_hash == "one-voxel-fixture"
+        @test length(get_projection_receipts(fixed_sources)) == 2
+
+        first_surface = deepcopy(Radiant.get_source(fixed_sources,particle).surface_sources)
+        Radiant.build(fixed_sources)
+        second_surface = Radiant.get_source(fixed_sources,particle).surface_sources
+        @test first_surface == second_surface
+        @test length(get_projection_receipts(fixed_sources)) == 2
+
+        mixed_sources = Fixed_Sources(cross_sections,geometry,solvers)
+        Radiant.add_source(mixed_sources,boundary_source)
+        Radiant.add_source(mixed_sources,Surface_Source())
+        @test_throws ErrorException Radiant.build(mixed_sources)
     end
 
     @testset "HTS tape-stack definitions" begin
