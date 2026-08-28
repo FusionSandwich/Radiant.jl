@@ -121,6 +121,13 @@ module Radiant
     ]
     radiant_src["structures/"] = [
         "Particle.jl",
+        "Source_Normalization.jl",
+        "Boundary_Angular_Current_Source.jl",
+        "Anisotropic_Volume_Source.jl",
+        "Transport_Balance.jl",
+        "Transport_Ownership_Map.jl",
+        "Layer_Definition.jl",
+        "Tape_Stack_Definition.jl",
         "Interaction.jl",
         "Elastic_Collision.jl",
         "Elastic_Scattering.jl",
@@ -199,6 +206,18 @@ module Radiant
     export Elastic_Collision,Elastic_Scattering,Inelastic_Collision,Bremsstrahlung,Compton,Pair_Production,Photoelectric,Annihilation,Rayleigh,Relaxation,Fluorescence,Auger
     export Material,Cross_Sections,Geometry,SN,Solvers,Surface_Source,Volume_Source,Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
     export Discrete_Ordinates  # backward-compatible alias for SN
+
+    # HTS deterministic-coupling foundations.
+    export Source_Normalization,get_physical_scale,get_duration,apply_normalization
+    export Abstract_Radiant_Source,Boundary_Angular_Current_Source
+    export get_incoming_current_density,get_incoming_current,get_total_incoming_current
+    export assert_current_closure,boundary_source_from_directional_current
+    export Anisotropic_Volume_Source,get_volume_source_rate
+    export Transport_Balance,get_particle_residual,get_energy_residual,get_charge_residual
+    export get_relative_particle_residual,get_relative_energy_residual,is_balanced
+    export Transport_Ownership_Record,Transport_Ownership_Map,validate_ownership,get_production_owner
+    export Layer_Definition,Tape_Stack_Definition,get_total_thickness,get_layer_boundaries,get_layer_index
+    export verification_eight_layer_stack
 
     #----
     # Execution of Radiant script files
