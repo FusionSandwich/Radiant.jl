@@ -106,6 +106,13 @@ function main()
         include(joinpath(ROOT,"test","hts_extended_tests.jl"))
     end
 
+    run_step!(receipt,"opensn_radiant_fixture_replay") do
+        replay_script = joinpath(
+            ROOT,"scripts","qualification","run_opensn_radiant_fixture_replay.jl",
+        )
+        run(`$(Base.julia_cmd()) --startup-file=no --project=$ROOT $replay_script`)
+    end
+
     receipt["overall_status"] = "PASS"
     receipt["completed_at"] = string(Dates.now())
     receipt["manifest_sha256_final"] = file_sha256(joinpath(ROOT,"Manifest.toml"))
