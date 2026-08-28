@@ -103,3 +103,7 @@ Convert a stored source-normalized value to a full-device physical rate.
 function apply_normalization(value, this::Source_Normalization)
     return value .* get_physical_scale(this)
 end
+
+# `get_normalization_factor` is retained for legacy Source/Fixed_Sources objects and is exported
+# here so tests and downstream adapters can inspect the legacy divisor explicitly.
+export get_normalization_factor
