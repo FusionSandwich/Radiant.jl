@@ -1,5 +1,6 @@
 using Radiant
 using Test
+using LinearAlgebra
 
 function one_voxel_source_fixture()
     particle = Photon()
