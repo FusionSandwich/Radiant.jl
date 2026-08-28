@@ -96,6 +96,7 @@ module Radiant
         "map_moments.jl",
         "constant_linear.jl",
         "angular_polynomial_basis.jl",
+        "hts_source_projection.jl",
         "energy_deposition.jl",
         "charge_deposition.jl",
         "flux.jl",
@@ -212,7 +213,9 @@ module Radiant
     export Abstract_Radiant_Source,Boundary_Angular_Current_Source
     export get_incoming_current_density,get_incoming_current,get_total_incoming_current
     export assert_current_closure,boundary_source_from_directional_current
-    export Anisotropic_Volume_Source,get_volume_source_rate
+    export Anisotropic_Volume_Source,get_volume_source_rate,get_source_normalization
+    export Boundary_Projection_Receipt,Volume_Projection_Receipt
+    export project_boundary_source,project_volume_source,get_projection_receipts
     export Transport_Balance,get_particle_residual,get_energy_residual,get_charge_residual
     export get_relative_particle_residual,get_relative_energy_residual,is_balanced
     export Transport_Ownership_Record,Transport_Ownership_Map,validate_ownership,get_production_owner
