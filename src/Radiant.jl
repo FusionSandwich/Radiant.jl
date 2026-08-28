@@ -132,6 +132,11 @@ module Radiant
         "Transport_Ownership_Map.jl",
         "Layer_Definition.jl",
         "Tape_Stack_Definition.jl",
+        "Energy_Partition.jl",
+        "Fibre_Diagnostic_Definition.jl",
+        "HTS_Detector_Definition.jl",
+        "Physics_Coverage_Register.jl",
+        "Protected_Response_Registry.jl",
         "Interaction.jl",
         "Elastic_Collision.jl",
         "Elastic_Scattering.jl",
@@ -195,7 +200,9 @@ module Radiant
         "livolant.jl"
     ]
     for folder in ["structures/","tools/","cross_sections/","particle_transport/"]
-        for file in radiant_src[folder] include(string(folder,file)) end
+        for file in radiant_src[folder]
+            include(string(folder,file))
+        end
     end
 
     # Export all generated material constructors (from structures/Material_list.jl).
@@ -206,10 +213,12 @@ module Radiant
     #----
     # Export objects
     #----
-    export Particle, Photon, Electron, Positron, Proton, Antiproton, Alpha, Muon, Antimuon
-    export Elastic_Collision,Elastic_Scattering,Inelastic_Collision,Bremsstrahlung,Compton,Pair_Production,Photoelectric,Annihilation,Rayleigh,Relaxation,Fluorescence,Auger
-    export Material,Cross_Sections,Geometry,SN,Solvers,Surface_Source,Volume_Source,Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
-    export Discrete_Ordinates  # backward-compatible alias for SN
+    export Particle,Photon,Electron,Positron,Proton,Antiproton,Alpha,Muon,Antimuon
+    export Elastic_Collision,Elastic_Scattering,Inelastic_Collision,Bremsstrahlung,Compton
+    export Pair_Production,Photoelectric,Annihilation,Rayleigh,Relaxation,Fluorescence,Auger
+    export Material,Cross_Sections,Geometry,SN,Solvers,Surface_Source,Volume_Source
+    export Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
+    export Discrete_Ordinates
 
     # HTS deterministic-coupling foundations.
     export Source_Normalization,get_physical_scale,get_duration,apply_normalization
@@ -221,9 +230,23 @@ module Radiant
     export project_boundary_source,project_volume_source,get_projection_receipts
     export Transport_Balance,get_particle_residual,get_energy_residual,get_charge_residual
     export get_relative_particle_residual,get_relative_energy_residual,is_balanced
-    export Transport_Ownership_Record,Transport_Ownership_Map,validate_ownership,get_production_owner
-    export Layer_Definition,Tape_Stack_Definition,get_total_thickness,get_layer_boundaries,get_layer_index
-    export verification_eight_layer_stack
+    export Transport_Ownership_Record,Transport_Ownership_Map,validate_ownership
+    export get_production_owner
+    export Layer_Definition,Tape_Stack_Definition,get_total_thickness,get_layer_boundaries
+    export get_layer_index,verification_eight_layer_stack
+
+    # High-fidelity deposition, diagnostic, detector, and qualification contracts.
+    export Energy_Partition,get_accounted_energy,get_energy_partition_residual
+    export get_relative_energy_partition_residual,is_energy_partition_closed
+    export is_energy_partition_resolved,get_prompt_heat_fraction
+    export Fibre_Radial_Layer,Fibre_Diagnostic_Definition,get_outer_radius
+    export get_cross_sectional_area,get_fibre_layer_index,requires_optical_response_model
+    export Detector_Converter_Layer,Detector_Thermal_Model,HTS_Detector_Definition
+    export is_ready_for_transient_response,get_active_volume,verification_b10_ybco_detector
+    export Physics_Coverage_Record,Physics_Coverage_Register,get_physics_record
+    export validate_physics_coverage,default_hts_physics_coverage
+    export Protected_Response,Protected_Response_Registry,get_protected_response
+    export response_is_converged,default_hts_protected_responses
 
     #----
     # Execution of Radiant script files
@@ -238,8 +261,9 @@ module Radiant
             end
         end
     end
+
     function run_script(script::AbstractString)
-        isfile(script) || error("Input script not found: $script")
+        isfile(script) || error("Input script not found: $(script)")
         include(script)
     end
 end
