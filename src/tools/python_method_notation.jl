@@ -1,5 +1,5 @@
-# To use Python-like notation for methods
-RadiantObject = Union{
+# To use Python-like notation for methods.
+const RadiantObject = Union{
     Material,
     Cross_Sections,
     Multigroup_Cross_Sections,
@@ -18,36 +18,43 @@ RadiantObject = Union{
     Particle,
     GN,
     CP,
-    Electromagnetic_Field
+    Electromagnetic_Field,
+    Source_Normalization,
+    Boundary_Angular_Current_Source,
+    Anisotropic_Volume_Source,
+    Transport_Balance,
+    Transport_Ownership_Record,
+    Transport_Ownership_Map,
+    Layer_Definition,
+    Tape_Stack_Definition,
+    Energy_Partition,
+    Fibre_Radial_Layer,
+    Fibre_Diagnostic_Definition,
+    Detector_Converter_Layer,
+    Detector_Thermal_Model,
+    HTS_Detector_Definition,
+    Physics_Coverage_Record,
+    Physics_Coverage_Register,
+    Protected_Response,
+    Protected_Response_Registry
 }
 
 """
     Base.getproperty(object::RadiantObject, s::Symbol)
 
-Special function to enable calling a method "m(this::T,...)" on a struct "S" of type "T"
-using the notation "S.m(...)" for a subset of struct.
-
+Enable calling a method `m(this::T,...)` using `object.m(...)` while preserving ordinary field
+access. This compatibility layer is retained for the existing Radiant user API.
 """
-function Base.getproperty(object::RadiantObject, s::Symbol)
-    if hasfield(typeof(object), s)
-        return getfield(object, s)
-    else
-        # Check if the function is defined in the Radiant module
-        if isdefined(Radiant, s) && getproperty(Radiant, s) isa Function
-            try
-                return function(x...)
-                    func = getproperty(Radiant, s)
-                    return func(object, x...)
-                end
-            catch e
-                # Log the original error and rethrow it
-                type = typeof(object)
-                @error "Failed to invoke function '$s' on object of type '$type'. Error: $e"
-                rethrow()
-            end
-        else
-            type = typeof(object)
-            throw(error("The object of type '$type' has no function '$s'."))
+function Base.getproperty(object::RadiantObject,s::Symbol)
+    if hasfield(typeof(object),s)
+        return getfield(object,s)
+    end
+    if isdefined(Radiant,s) && getproperty(Radiant,s) isa Function
+        return function(arguments...)
+            function_object = getproperty(Radiant,s)
+            return function_object(object,arguments...)
         end
     end
+    type = typeof(object)
+    error("The object of type $(type) has no field or Radiant method $(s).")
 end
