@@ -1,5 +1,7 @@
 const BOUNDARY_SOURCE_HDF5_SCHEMA = "radiant.boundary_angular_current/v1"
 const VOLUME_SOURCE_HDF5_SCHEMA = "radiant.anisotropic_volume_source/v1"
+const EXTERNAL_ROW_MAJOR = "external-row-major"
+const JULIA_NATIVE_ORDER = "julia-native"
 
 function _source_file_sha256(path::AbstractString)
     isfile(path) || error("Source artifact does not exist: $(path).")
@@ -16,23 +18,17 @@ end
 function _hdf5_scalar(value,label::AbstractString)
     if value isa Number || value isa AbstractString || value isa Symbol
         return value
-    end
-    if value isa AbstractArray && length(value) == 1
-        return first(value)
+    elseif value isa AbstractVector{UInt8}
+        return String(value)
+    elseif value isa AbstractArray && length(value) == 1
+        return _hdf5_scalar(first(value),label)
     end
     error("HDF5 value $(label) must be scalar.")
 end
 
 function _hdf5_string(value,label::AbstractString)
     scalar = _hdf5_scalar(value,label)
-    if scalar isa AbstractString
-        return String(scalar)
-    elseif scalar isa Symbol
-        return String(scalar)
-    elseif scalar isa AbstractVector{UInt8}
-        return String(scalar)
-    end
-    return string(scalar)
+    return scalar isa AbstractString ? String(scalar) : string(scalar)
 end
 
 function _hdf5_float(value,label::AbstractString)
@@ -52,20 +48,34 @@ function _hdf5_vector(value,::Type{T},label::AbstractString) where T
     return result
 end
 
+function _validate_storage_order(value::AbstractString)
+    value in (EXTERNAL_ROW_MAJOR,JULIA_NATIVE_ORDER) || error(
+        "Unsupported HDF5 storage order $(value).",
+    )
+    return String(value)
+end
+
 function _canonical_matrix(
     value,
     rows::Int64,
     columns::Int64,
     label::AbstractString,
+    storage_order::AbstractString,
     ::Type{T}=Float64,
 ) where T
     data = T.(value)
-    if size(data) == (rows,columns)
-        return Array{T,2}(data)
-    elseif size(data) == (columns,rows)
-        return Array{T,2}(permutedims(data,(2,1)))
+    canonical = if storage_order == EXTERNAL_ROW_MAJOR
+        ndims(data) == 2 || error("HDF5 matrix $(label) must have rank two.")
+        permutedims(data,(2,1))
+    elseif storage_order == JULIA_NATIVE_ORDER
+        data
+    else
+        error("Unsupported HDF5 storage order $(storage_order).")
     end
-    error("HDF5 matrix $(label) has shape $(size(data)); expected $(rows,columns) or its row-major reversal.")
+    size(canonical) == (rows,columns) || error(
+        "HDF5 matrix $(label) resolves to shape $(size(canonical)); expected $(rows,columns).",
+    )
+    return Array{T,2}(canonical)
 end
 
 function _canonical_tensor3(
@@ -74,26 +84,29 @@ function _canonical_tensor3(
     second_dimension::Int64,
     third_dimension::Int64,
     label::AbstractString,
+    storage_order::AbstractString,
     ::Type{T}=Float64,
 ) where T
     data = T.(value)
-    expected = (first_dimension,second_dimension,third_dimension)
-    reversed = (third_dimension,second_dimension,first_dimension)
-    if size(data) == expected
-        return Array{T,3}(data)
-    elseif size(data) == reversed
-        return Array{T,3}(permutedims(data,(3,2,1)))
+    canonical = if storage_order == EXTERNAL_ROW_MAJOR
+        ndims(data) == 3 || error("HDF5 tensor $(label) must have rank three.")
+        permutedims(data,(3,2,1))
+    elseif storage_order == JULIA_NATIVE_ORDER
+        data
+    else
+        error("Unsupported HDF5 storage order $(storage_order).")
     end
-    error("HDF5 tensor $(label) has shape $(size(data)); expected $(expected) or row-major reversal $(reversed).")
+    expected = (first_dimension,second_dimension,third_dimension)
+    size(canonical) == expected || error(
+        "HDF5 tensor $(label) resolves to shape $(size(canonical)); expected $(expected).",
+    )
+    return Array{T,3}(canonical)
 end
 
-function _read_string_dataset(group,name::AbstractString)
-    return _hdf5_string(read(_hdf5_required(group,name)),name)
-end
-
-function _read_float_dataset(group,name::AbstractString)
-    return _hdf5_float(read(_hdf5_required(group,name)),name)
-end
+_read_string_dataset(group,name::AbstractString) =
+    _hdf5_string(read(_hdf5_required(group,name)),name)
+_read_float_dataset(group,name::AbstractString) =
+    _hdf5_float(read(_hdf5_required(group,name)),name)
 
 function _read_provenance(file)
     result = Dict{String,String}()
@@ -117,10 +130,14 @@ function _read_provenance(file)
 end
 
 function _write_provenance(file,provenance::AbstractDict)
+    normalized = Dict{String,String}()
+    for (key,value) in provenance
+        normalized[string(key)] = string(value)
+    end
     group = HDF5.create_group(file,"provenance")
-    ordered_keys = sort!(String[string(key) for key in keys(provenance)])
+    ordered_keys = sort!(collect(keys(normalized)))
     group["keys"] = ordered_keys
-    group["values"] = String[string(provenance[key]) for key in ordered_keys]
+    group["values"] = String[normalized[key] for key in ordered_keys]
     return group
 end
 
@@ -158,11 +175,16 @@ function _verify_file_hash(path::AbstractString,expected_file_sha256)
     return actual
 end
 
+_write_external_matrix(group,name::AbstractString,value::AbstractMatrix) =
+    (group[name] = permutedims(value,(2,1)))
+_write_external_tensor3(group,name::AbstractString,value::AbstractArray{<:Any,3}) =
+    (group[name] = permutedims(value,(3,2,1)))
+
 """
     write_boundary_angular_current_hdf5(path, source; overwrite=false)
 
-Write a plain HDF5 boundary source. Multidimensional arrays are written in reversed Julia
-dimension order so row-major Python/h5py readers see canonical `(patch, group, direction)` and
+Write a plain HDF5 boundary source. Multidimensional arrays are reversed before HDF5.jl writes
+them so Python/h5py and other row-major readers see canonical `(patch, group, direction)` and
 `(patch, component)` shapes. The returned value is the completed file SHA-256.
 """
 function write_boundary_angular_current_hdf5(
@@ -171,8 +193,7 @@ function write_boundary_angular_current_hdf5(
     overwrite::Bool=false,
 )
     isfile(path) && !overwrite && error("Refusing to overwrite source artifact $(path).")
-    parent = dirname(abspath(path))
-    isempty(parent) || mkpath(parent)
+    mkpath(dirname(abspath(path)))
 
     HDF5.h5open(path,"w") do file
         meta = HDF5.create_group(file,"meta")
@@ -184,29 +205,26 @@ function write_boundary_angular_current_hdf5(
         meta["schema"] = BOUNDARY_SOURCE_HDF5_SCHEMA
         meta["particle"] = get_tag(source.particle)
         meta["source_representation"] = "angular_flux"
-        meta["storage_order"] = "external-row-major"
+        meta["storage_order"] = EXTERNAL_ROW_MAJOR
         _write_normalization(meta,source.normalization)
 
         patch["id"] = source.patch_ids
-        patch["centroid_cm"] = permutedims(source.centroids_cm,(2,1))
+        _write_external_matrix(patch,"centroid_cm",source.centroids_cm)
         patch["area_cm2"] = source.areas_cm2
-        patch["normal"] = permutedims(source.normals,(2,1))
-        patch["tangent_1"] = permutedims(source.tangent_1,(2,1))
-        patch["tangent_2"] = permutedims(source.tangent_2,(2,1))
+        _write_external_matrix(patch,"normal",source.normals)
+        _write_external_matrix(patch,"tangent_1",source.tangent_1)
+        _write_external_matrix(patch,"tangent_2",source.tangent_2)
         energy["edges_eV"] = source.energy_edges_eV
-        angle["direction_cosines"] = permutedims(source.directions,(2,1))
+        _write_external_matrix(angle,"direction_cosines",source.directions)
         angle["quadrature_weights"] = source.quadrature_weights
-        source_group["angular_flux"] = permutedims(source.angular_flux,(3,2,1))
-        source_group["incoming_current"] = permutedims(get_incoming_current(source),(2,1))
+        _write_external_tensor3(source_group,"angular_flux",source.angular_flux)
+        _write_external_matrix(source_group,"incoming_current",get_incoming_current(source))
         if !isnothing(source.variance)
-            source_group["variance"] = permutedims(source.variance,(3,2,1))
+            _write_external_tensor3(source_group,"variance",source.variance)
         end
         _write_provenance(file,merge(
             source.provenance,
-            Dict(
-                "writer" => "Radiant.jl",
-                "schema" => BOUNDARY_SOURCE_HDF5_SCHEMA,
-            ),
+            Dict("writer" => "Radiant.jl","schema" => BOUNDARY_SOURCE_HDF5_SCHEMA),
         ))
     end
     return _source_file_sha256(path)
@@ -215,10 +233,9 @@ end
 """
     read_boundary_angular_current_hdf5(path, particle; expected_file_sha256=nothing)
 
-Read an OpenMC/OpenSn/Radiant boundary artifact in the canonical HDF5 schema. Arrays may be stored
-in Julia column-major or Python/C row-major order; accepted shapes are checked explicitly. The
-reader supports `angular_flux` and `directional_current_density` representations and validates an
-optional stored patch/group incoming-current ledger.
+Read an OpenMC/OpenSn/Radiant boundary artifact in the canonical HDF5 schema. The reader supports
+`angular_flux` and `directional_current_density` representations, enforces declared storage order,
+and validates an optional patch/group incoming-current ledger.
 """
 function read_boundary_angular_current_hdf5(
     path::AbstractString,
@@ -237,6 +254,7 @@ function read_boundary_angular_current_hdf5(
         schema == BOUNDARY_SOURCE_HDF5_SCHEMA || error(
             "Unsupported boundary-source schema $(schema).",
         )
+        storage_order = _validate_storage_order(_read_string_dataset(meta,"storage_order"))
         stored_particle = _read_string_dataset(meta,"particle")
         stored_particle == get_tag(particle) || error(
             "Boundary-source particle $(stored_particle) does not match $(get_tag(particle)).",
@@ -246,19 +264,38 @@ function read_boundary_angular_current_hdf5(
 
         patch_ids = _hdf5_vector(read(_hdf5_required(patch,"id")),Int64,"patch/id")
         Npatch = length(patch_ids)
-        centroids = _canonical_matrix(read(_hdf5_required(patch,"centroid_cm")),Npatch,3,"patch/centroid_cm")
+        centroids = _canonical_matrix(
+            read(_hdf5_required(patch,"centroid_cm")),Npatch,3,
+            "patch/centroid_cm",storage_order,
+        )
         areas = _hdf5_vector(read(_hdf5_required(patch,"area_cm2")),Float64,"patch/area_cm2")
         length(areas) == Npatch || error("Patch areas do not match patch identifiers.")
-        normals = _canonical_matrix(read(_hdf5_required(patch,"normal")),Npatch,3,"patch/normal")
-        tangent_1 = _canonical_matrix(read(_hdf5_required(patch,"tangent_1")),Npatch,3,"patch/tangent_1")
-        tangent_2 = _canonical_matrix(read(_hdf5_required(patch,"tangent_2")),Npatch,3,"patch/tangent_2")
+        normals = _canonical_matrix(
+            read(_hdf5_required(patch,"normal")),Npatch,3,"patch/normal",storage_order,
+        )
+        tangent_1 = _canonical_matrix(
+            read(_hdf5_required(patch,"tangent_1")),Npatch,3,
+            "patch/tangent_1",storage_order,
+        )
+        tangent_2 = _canonical_matrix(
+            read(_hdf5_required(patch,"tangent_2")),Npatch,3,
+            "patch/tangent_2",storage_order,
+        )
 
-        energy_edges = _hdf5_vector(read(_hdf5_required(energy,"edges_eV")),Float64,"energy/edges_eV")
+        energy_edges = _hdf5_vector(
+            read(_hdf5_required(energy,"edges_eV")),Float64,"energy/edges_eV",
+        )
         Ngroup = length(energy_edges)-1
         Ngroup > 0 || error("Boundary source requires at least one energy group.")
-        weights = _hdf5_vector(read(_hdf5_required(angle,"quadrature_weights")),Float64,"angle/quadrature_weights")
+        weights = _hdf5_vector(
+            read(_hdf5_required(angle,"quadrature_weights")),Float64,
+            "angle/quadrature_weights",
+        )
         Ndir = length(weights)
-        directions = _canonical_matrix(read(_hdf5_required(angle,"direction_cosines")),Ndir,3,"angle/direction_cosines")
+        directions = _canonical_matrix(
+            read(_hdf5_required(angle,"direction_cosines")),Ndir,3,
+            "angle/direction_cosines",storage_order,
+        )
         provenance = _read_provenance(file)
         provenance["file_sha256"] = artifact_hash
         provenance["reader"] = "Radiant.jl"
@@ -266,10 +303,11 @@ function read_boundary_angular_current_hdf5(
         source = if representation == "angular_flux"
             values = _canonical_tensor3(
                 read(_hdf5_required(source_group,"angular_flux")),
-                Npatch,Ngroup,Ndir,"source/angular_flux",
+                Npatch,Ngroup,Ndir,"source/angular_flux",storage_order,
             )
             variance = haskey(source_group,"variance") ? _canonical_tensor3(
-                read(source_group["variance"]),Npatch,Ngroup,Ndir,"source/variance",
+                read(source_group["variance"]),Npatch,Ngroup,Ndir,
+                "source/variance",storage_order,
             ) : nothing
             Boundary_Angular_Current_Source(
                 particle,patch_ids,centroids,areas,normals,tangent_1,tangent_2,
@@ -279,10 +317,11 @@ function read_boundary_angular_current_hdf5(
         elseif representation == "directional_current_density"
             values = _canonical_tensor3(
                 read(_hdf5_required(source_group,"directional_current_density")),
-                Npatch,Ngroup,Ndir,"source/directional_current_density",
+                Npatch,Ngroup,Ndir,"source/directional_current_density",storage_order,
             )
             variance = haskey(source_group,"variance") ? _canonical_tensor3(
-                read(source_group["variance"]),Npatch,Ngroup,Ndir,"source/variance",
+                read(source_group["variance"]),Npatch,Ngroup,Ndir,
+                "source/variance",storage_order,
             ) : nothing
             boundary_source_from_directional_current(
                 particle,patch_ids,centroids,areas,normals,tangent_1,tangent_2,
@@ -296,7 +335,7 @@ function read_boundary_angular_current_hdf5(
         if haskey(source_group,"incoming_current")
             reference = _canonical_matrix(
                 read(source_group["incoming_current"]),Npatch,Ngroup,
-                "source/incoming_current",
+                "source/incoming_current",storage_order,
             )
             assert_current_closure(source,reference)
         end
@@ -311,8 +350,7 @@ function write_anisotropic_volume_source_hdf5(
     overwrite::Bool=false,
 )
     isfile(path) && !overwrite && error("Refusing to overwrite source artifact $(path).")
-    parent = dirname(abspath(path))
-    isempty(parent) || mkpath(parent)
+    mkpath(dirname(abspath(path)))
 
     HDF5.h5open(path,"w") do file
         meta = HDF5.create_group(file,"meta")
@@ -324,7 +362,7 @@ function write_anisotropic_volume_source_hdf5(
         meta["schema"] = VOLUME_SOURCE_HDF5_SCHEMA
         meta["particle"] = get_tag(source.particle)
         meta["angular_representation"] = String(source.angular_representation)
-        meta["storage_order"] = "external-row-major"
+        meta["storage_order"] = EXTERNAL_ROW_MAJOR
         meta["parent_reaction"] = isnothing(source.parent_reaction) ? "none" : source.parent_reaction
         _write_normalization(meta,source.normalization)
 
@@ -332,20 +370,17 @@ function write_anisotropic_volume_source_hdf5(
         voxel["volume_cm3"] = source.voxel_volumes_cm3
         energy["edges_eV"] = source.energy_edges_eV
         if source.angular_representation == :ordinates
-            angle["direction_cosines"] = permutedims(source.directions,(2,1))
+            _write_external_matrix(angle,"direction_cosines",source.directions)
             angle["quadrature_weights"] = source.quadrature_weights
         end
-        source_group["values"] = permutedims(source.values,(3,2,1))
+        _write_external_tensor3(source_group,"values",source.values)
         source_group["integrated_rate"] = get_volume_source_rate(source)
         if !isnothing(source.variance)
-            source_group["variance"] = permutedims(source.variance,(3,2,1))
+            _write_external_tensor3(source_group,"variance",source.variance)
         end
         _write_provenance(file,merge(
             source.provenance,
-            Dict(
-                "writer" => "Radiant.jl",
-                "schema" => VOLUME_SOURCE_HDF5_SCHEMA,
-            ),
+            Dict("writer" => "Radiant.jl","schema" => VOLUME_SOURCE_HDF5_SCHEMA),
         ))
     end
     return _source_file_sha256(path)
@@ -369,6 +404,7 @@ function read_anisotropic_volume_source_hdf5(
         schema == VOLUME_SOURCE_HDF5_SCHEMA || error(
             "Unsupported volume-source schema $(schema).",
         )
+        storage_order = _validate_storage_order(_read_string_dataset(meta,"storage_order"))
         stored_particle = _read_string_dataset(meta,"particle")
         stored_particle == get_tag(particle) || error(
             "Volume-source particle $(stored_particle) does not match $(get_tag(particle)).",
@@ -380,9 +416,13 @@ function read_anisotropic_volume_source_hdf5(
 
         voxel_ids = _hdf5_vector(read(_hdf5_required(voxel,"id")),Int64,"voxel/id")
         Nvoxel = length(voxel_ids)
-        volumes = _hdf5_vector(read(_hdf5_required(voxel,"volume_cm3")),Float64,"voxel/volume_cm3")
+        volumes = _hdf5_vector(
+            read(_hdf5_required(voxel,"volume_cm3")),Float64,"voxel/volume_cm3",
+        )
         length(volumes) == Nvoxel || error("Volume-source volumes do not match voxel identifiers.")
-        energy_edges = _hdf5_vector(read(_hdf5_required(energy,"edges_eV")),Float64,"energy/edges_eV")
+        energy_edges = _hdf5_vector(
+            read(_hdf5_required(energy,"edges_eV")),Float64,"energy/edges_eV",
+        )
         Ngroup = length(energy_edges)-1
         Ngroup > 0 || error("Volume source requires at least one energy group.")
 
@@ -390,41 +430,30 @@ function read_anisotropic_volume_source_hdf5(
         weights = Float64[]
         Ncoefficient = 1
         if representation == :ordinates
-            weights = _hdf5_vector(read(_hdf5_required(angle,"quadrature_weights")),Float64,"angle/quadrature_weights")
+            weights = _hdf5_vector(
+                read(_hdf5_required(angle,"quadrature_weights")),Float64,
+                "angle/quadrature_weights",
+            )
             Ncoefficient = length(weights)
             directions = _canonical_matrix(
                 read(_hdf5_required(angle,"direction_cosines")),Ncoefficient,3,
-                "angle/direction_cosines",
+                "angle/direction_cosines",storage_order,
             )
         elseif representation == :moments
-            raw = read(_hdf5_required(source_group,"values"))
-            Ncoefficient = size(raw,1)
-            if size(raw,1) == Nvoxel
-                Ncoefficient = size(raw,3)
-            end
+            raw_shape = size(read(_hdf5_required(source_group,"values")))
+            length(raw_shape) == 3 || error("Moment source values must be rank three.")
+            Ncoefficient = storage_order == EXTERNAL_ROW_MAJOR ? raw_shape[1] : raw_shape[3]
         elseif representation != :isotropic
             error("Unsupported volume-source angular representation $(representation).")
         end
 
         raw_values = read(_hdf5_required(source_group,"values"))
-        if representation == :moments
-            possible_native = size(raw_values)
-            if length(possible_native) != 3
-                error("Moment source values must be a rank-three tensor.")
-            end
-            if possible_native[1] == Nvoxel && possible_native[2] == Ngroup
-                Ncoefficient = possible_native[3]
-            elseif possible_native[3] == Nvoxel && possible_native[2] == Ngroup
-                Ncoefficient = possible_native[1]
-            else
-                error("Moment source values do not match voxel and group dimensions.")
-            end
-        end
         values = _canonical_tensor3(
-            raw_values,Nvoxel,Ngroup,Ncoefficient,"source/values",
+            raw_values,Nvoxel,Ngroup,Ncoefficient,"source/values",storage_order,
         )
         variance = haskey(source_group,"variance") ? _canonical_tensor3(
-            read(source_group["variance"]),Nvoxel,Ngroup,Ncoefficient,"source/variance",
+            read(source_group["variance"]),Nvoxel,Ngroup,Ncoefficient,
+            "source/variance",storage_order,
         ) : nothing
         provenance = _read_provenance(file)
         provenance["file_sha256"] = artifact_hash
@@ -443,9 +472,11 @@ function read_anisotropic_volume_source_hdf5(
             length(reference) == length(calculated) || error(
                 "Stored and calculated volume-source rate vectors have different lengths.",
             )
-            all(isapprox.(calculated,reference;rtol=1.0e-10,atol=1.0e-12)) || error(
-                "Volume-source integrated-rate closure failed.",
-            )
+            for index in eachindex(reference)
+                isapprox(calculated[index],reference[index];rtol=1.0e-10,atol=1.0e-12) || error(
+                    "Volume-source integrated-rate closure failed in group $(index).",
+                )
+            end
         end
         source
     end
