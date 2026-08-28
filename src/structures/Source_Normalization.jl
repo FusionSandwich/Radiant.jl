@@ -104,6 +104,5 @@ function apply_normalization(value, this::Source_Normalization)
     return value .* get_physical_scale(this)
 end
 
-# Audit-facing compatibility exports. `dot` is the existing LinearAlgebra binding already used by
-# Radiant internally; re-exporting it keeps the standalone regression fixture dependency-free.
-export get_normalization_factor,dot
+# Audit-facing compatibility export for legacy Source/Fixed_Sources objects.
+export get_normalization_factor
