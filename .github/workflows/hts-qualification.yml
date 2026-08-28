@@ -1,0 +1,47 @@
+name: HTS qualification
+
+on:
+  push:
+    branches:
+      - main
+      - 'codex/**'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: hts-qualification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  qualification:
+    name: Julia ${{ matrix.julia-version }} qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version:
+          - '1.6.7'
+          - '1.10'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: ${{ matrix.julia-version }}
+          arch: x64
+      - uses: julia-actions/cache@v3
+      - name: Run hash-bound qualification
+        env:
+          JULIA_NUM_THREADS: '2'
+          RADIANT_QUALIFICATION_OUTPUT: artifacts/qualification
+        run: julia --project=. scripts/qualification/run_full_qualification.jl
+      - name: Upload qualification receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radiant-qualification-julia-${{ matrix.julia-version }}
+          path: artifacts/qualification
+          if-no-files-found: error
