@@ -6,7 +6,9 @@ module Radiant
     import Base.println
     using Printf: @sprintf
     using LinearAlgebra
+    using HDF5
     using JLD2
+    using SHA
     using SpecialFunctions
 
     # Load version-gated compatibility methods before any source files are evaluated.
@@ -199,7 +201,10 @@ module Radiant
         "anderson.jl",
         "livolant.jl"
     ]
-    for folder in ["structures/","tools/","cross_sections/","particle_transport/"]
+    radiant_src["interchange/"] = [
+        "source_hdf5.jl"
+    ]
+    for folder in ["structures/","tools/","cross_sections/","particle_transport/","interchange/"]
         for file in radiant_src[folder]
             include(string(folder,file))
         end
@@ -247,6 +252,11 @@ module Radiant
     export validate_physics_coverage,default_hts_physics_coverage
     export Protected_Response,Protected_Response_Registry,get_protected_response
     export response_is_converged,default_hts_protected_responses
+
+    # Hash-bound OpenMC/OpenSn/Radiant source interchange.
+    export BOUNDARY_SOURCE_HDF5_SCHEMA,VOLUME_SOURCE_HDF5_SCHEMA
+    export write_boundary_angular_current_hdf5,read_boundary_angular_current_hdf5
+    export write_anisotropic_volume_source_hdf5,read_anisotropic_volume_source_hdf5
 
     #----
     # Execution of Radiant script files
