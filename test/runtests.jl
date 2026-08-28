@@ -34,8 +34,7 @@ function one_voxel_source_fixture()
     solvers = Solvers()
     Radiant.add_solver(solvers,solver)
 
-    Ω,w = Radiant.quadrature(2,"gauss-legendre",1,1)
-    directions = hcat(Ω,zeros(Float64,length(Ω)),zeros(Float64,length(Ω)))
+    _,w,directions,_ = Radiant._solver_quadrature(solver,geometry)
     return particle,cross_sections,geometry,solver,solvers,directions,w
 end
 
