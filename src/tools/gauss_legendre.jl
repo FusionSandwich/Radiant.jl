@@ -19,7 +19,7 @@ function gauss_legendre(N::Int64)
 
 # Initial guess (Tricomi)
 x = zeros(N)
-for i in range(1,div(N,2))
+for i in 1:div(N,2)
     ϕ = π/2 * (4*i-1)/(2*N+1)
     x[i] = (1 - (N-1)/(8*N^3) - 1/(384*N^4)*(39-28/(sin(ϕ)^2))) * cos(ϕ)
     x[N-i+1] = -x[i]
@@ -28,7 +28,7 @@ end
 # Compute quadrature parameters
 w = zeros(N)
 dPdx = 0
-for i in range(1,N)
+for i in 1:N
 
     # Initial comparaison point outside the domain for x
     xold = 2
@@ -40,7 +40,7 @@ for i in range(1,N)
 
         # Legendre polynomial (Bonnet's recursion formula)
         P = [1,x[i]]
-        for n in range(2,N)
+        for n in 2:N
            Pn = ((2*n-1)*x[i]*P[2]-(n-1)*P[1])/n
            P[1] = P[2]
            P[2] = Pn
