@@ -62,6 +62,11 @@ function run_step!(receipt,name::String,operation::Function)
     end
 end
 
+function run_subqualification(script_name::String)
+    script = joinpath(ROOT,"scripts","qualification",script_name)
+    run(`$(Base.julia_cmd()) --startup-file=no --project=$ROOT $script`)
+end
+
 function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
@@ -106,11 +111,12 @@ function main()
         include(joinpath(ROOT,"test","hts_extended_tests.jl"))
     end
 
+    run_step!(receipt,"radiant_em_analytic") do
+        run_subqualification("run_radiant_em_analytic.jl")
+    end
+
     run_step!(receipt,"opensn_radiant_fixture_replay") do
-        replay_script = joinpath(
-            ROOT,"scripts","qualification","run_opensn_radiant_fixture_replay.jl",
-        )
-        run(`$(Base.julia_cmd()) --startup-file=no --project=$ROOT $replay_script`)
+        run_subqualification("run_opensn_radiant_fixture_replay.jl")
     end
 
     receipt["overall_status"] = "PASS"
