@@ -8,24 +8,22 @@ on:
   pull_request:
   workflow_dispatch:
 concurrency:
-  # Skip intermediate builds: always.
-  # Cancel intermediate builds: only if it is a pull request build.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
 jobs:
-  test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+  qualification:
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
-      actions: write
       contents: read
     strategy:
       fail-fast: false
       matrix:
         version:
-          - '1.6'
-          - '1.10'
+          - '1.6.7'
+          - '1.10.12'
         os:
           - ubuntu-latest
         arch:
@@ -37,5 +35,12 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v3
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
+      - name: Run reproducible Radiant qualification
+        run: julia --startup-file=no --project=. scripts/qualification/run_julia_qualification.jl
+      - name: Upload qualification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radiant-qualification-julia-${{ matrix.version }}
+          path: qualification-results/
+          if-no-files-found: warn
