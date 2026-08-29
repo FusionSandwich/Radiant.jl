@@ -5,7 +5,6 @@ const HTS_ADDON_COMPONENT_STATUSES = (
     :blocked,
 )
 
-"""One independently extractable component of the temporary HTS extension."""
 struct HTS_Addon_Component
     component_id::Symbol
     files::Vector{String}
@@ -30,19 +29,10 @@ struct HTS_Addon_Component
             "HTS add-on component file paths must be unique.",
         )
         dependency_vector = String[string(value) for value in core_dependencies]
-        return new(
-            component_id,file_vector,dependency_vector,status,String(notes),
-        )
+        return new(component_id,file_vector,dependency_vector,status,String(notes))
     end
 end
 
-"""
-    HTS_Addon_Extraction_Manifest
-
-Machine-readable boundary for code temporarily hosted in `Radiant.jl` but intended to become the
-separate `RadiantHTS.jl` package. New HTS-specific implementation should remain under
-`src/hts_addon/`; changes outside that directory must be generic hooks or include/export wiring.
-"""
 struct HTS_Addon_Extraction_Manifest
     schema::String
     temporary_host_repository::String
@@ -54,7 +44,7 @@ struct HTS_Addon_Extraction_Manifest
 
     function HTS_Addon_Extraction_Manifest(
         components::AbstractVector{HTS_Addon_Component};
-        schema::AbstractString="radiant.hts_addon_extraction/v1",
+        schema::AbstractString="radiant.hts_addon_extraction/v2",
         temporary_host_repository::AbstractString="FusionSandwich/Radiant.jl",
         intended_package::AbstractString="RadiantHTS.jl",
         generic_core_touchpoints::AbstractVector{<:AbstractString}=String[],
@@ -102,6 +92,8 @@ function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
         "no-production-physics-without-qualified-data",
         "one-owner-per-particle-domain-response",
         "source-and-result-provenance-preserved",
+        "synthetic-evidence-cannot-pass-physical-gates",
+        "future-addon-extraction-preserved",
     )
     for invariant in required_invariants
         invariant in this.extraction_invariants || error(
@@ -120,49 +112,59 @@ function get_addon_component(
     return this.components[index]
 end
 
-"""Return the current temporary-core extraction plan for all HTS-specific capabilities."""
 function default_hts_addon_extraction_manifest()
     components = HTS_Addon_Component[
         HTS_Addon_Component(
             :process_resolved_scoring,
             ["src/hts_addon/Process_Resolved_Scoring.jl"];
             core_dependencies=[
-                "Multigroup_Cross_Sections response-channel hook",
-                "Cross_Sections",
-                "Geometry",
-                "Flux",
-            ],
-            status=:temporary_core,
+                "Multigroup_Cross_Sections response-channel hook","Cross_Sections",
+                "Geometry","Flux",
+            ],status=:temporary_core,
         ),
         HTS_Addon_Component(
             :spatial_field_maps,
-            ["src/hts_addon/Spatial_Magnetic_Field_Map.jl"];
-            core_dependencies=["Electromagnetic_Field","Geometry"],
-            status=:ready_to_extract,
+            [
+                "src/hts_addon/Spatial_Magnetic_Field_Map.jl",
+                "src/hts_addon/Spatial_Field_Transport.jl",
+            ];
+            core_dependencies=[
+                "Electromagnetic_Field cell-centred field hook",
+                "sn_flux cell-local operator construction",
+                "sn_inner_pass cell-local source application",
+            ],status=:temporary_core,
         ),
         HTS_Addon_Component(
             :piecewise_flat_atlas,
             ["src/hts_addon/Piecewise_Flat_Tape_Atlas.jl"];
-            core_dependencies=["Spatial_Magnetic_Field_Map"],
+            core_dependencies=["Spatial_Magnetic_Field_Map"],status=:ready_to_extract,
+        ),
+        HTS_Addon_Component(
+            :faceted_geometry,
+            ["src/hts_addon/Faceted_Geometry.jl"];
+            core_dependencies=["HDF5 interchange helpers","Geometry"],
             status=:ready_to_extract,
+            notes="DAGMC/ParaStell facets are validated and localized/voxelized; direct unstructured SN transport is not claimed.",
         ),
         HTS_Addon_Component(
             :gd_capture_cascade,
-            ["src/hts_addon/Gd_Prompt_Capture_Cascade.jl"];
-            core_dependencies=["Anisotropic_Volume_Source","Source_Normalization","Particle"],
-            status=:ready_to_extract,
+            [
+                "src/hts_addon/Gd_Prompt_Capture_Cascade.jl",
+                "src/hts_addon/Gd_Cascade_Data_Adapter.jl",
+            ];
+            core_dependencies=[
+                "Anisotropic_Volume_Source","Source_Normalization","Particle",
+            ],status=:ready_to_extract,
         ),
         HTS_Addon_Component(
             :subkev_thermalization,
             ["src/hts_addon/SubkeV_Thermalization.jl"];
-            core_dependencies=["Energy_Partition"],
-            status=:ready_to_extract,
+            core_dependencies=["Energy_Partition"],status=:ready_to_extract,
         ),
         HTS_Addon_Component(
             :microdosimetry,
             ["src/hts_addon/Statistical_Microdosimetry.jl"];
-            core_dependencies=["Energy_Partition","Random"],
-            status=:ready_to_extract,
+            core_dependencies=["Energy_Partition","Random"],status=:ready_to_extract,
         ),
         HTS_Addon_Component(
             :cryogenic_electrothermal,
@@ -170,14 +172,43 @@ function default_hts_addon_extraction_manifest()
             core_dependencies=["LinearAlgebra","HTS_Detector_Definition"],
             status=:ready_to_extract,
         ),
+        HTS_Addon_Component(
+            :material_response_registry,
+            ["src/hts_addon/Material_Response_Registry.jl"];
+            core_dependencies=["Cryogenic_Electrothermal"],status=:ready_to_extract,
+        ),
+        HTS_Addon_Component(
+            :atomistic_response_tables,
+            ["src/hts_addon/Atomistic_Response_Table_Pipeline.jl"];
+            core_dependencies=["HDF5","Material_Response_Registry"],
+            status=:ready_to_extract,
+        ),
+        HTS_Addon_Component(
+            :physical_reference_qualification,
+            ["src/hts_addon/Physical_Reference_Qualification.jl"];
+            core_dependencies=["Process_Resolved_Scoring"],status=:ready_to_extract,
+        ),
+        HTS_Addon_Component(
+            :closed_opensn_radiant_coupling,
+            ["src/hts_addon/OpenSn_Radiant_Closed_Coupling.jl"];
+            core_dependencies=[
+                "Boundary_Angular_Current_Source","Transport_Ownership_Map",
+            ],status=:ready_to_extract,
+        ),
     ]
     manifest = HTS_Addon_Extraction_Manifest(
         components;
         generic_core_touchpoints=[
-            "src/Radiant.jl include/export wiring",
+            "src/Radiant.jl temporary include/export wiring",
             "src/structures/Multigroup_Cross_Sections.jl generic response channels",
             "src/cross_sections/generate_cross_sections.jl response-channel population",
-            "Project.toml stdlib dependencies",
+            "src/structures/Electromagnetic_Field.jl generic cell-centred field storage",
+            "src/particle_transport/sn_flux.jl generic cell-local field operator",
+            "src/particle_transport/sn_inner_pass.jl generic cell-local operator application",
+            "src/interchange/source_hdf5.jl generic source interchange",
+            "Project.toml standard-library dependencies",
+            "scripts/geometry/export_dagmc_facets.py external adapter",
+            "scripts/data/download_zenodo_record.py external-data acquisition",
         ],
         extraction_invariants=[
             "no-default-branch-merge",
@@ -186,11 +217,15 @@ function default_hts_addon_extraction_manifest()
             "source-and-result-provenance-preserved",
             "prompt-and-delayed-ledgers-separated",
             "mean-transport-and-event-sampling-distinguished",
+            "synthetic-evidence-cannot-pass-physical-gates",
+            "future-addon-extraction-preserved",
         ],
         metadata=Dict(
             "hosting_policy" => "temporary-core-only",
             "future_repository" => "RadiantHTS.jl",
             "branch_policy" => "branch-only-no-pr",
+            "direct_faceted_transport" => "not-claimed",
+            "spatial_field_transport" => "cell-local-within-one-sn-sweep",
         ),
     )
     validate_addon_extraction_manifest(manifest)

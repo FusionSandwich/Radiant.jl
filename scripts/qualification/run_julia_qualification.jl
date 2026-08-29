@@ -39,30 +39,25 @@ function write_receipt(receipt)
     end
 end
 
-# Julia do-block syntax passes the anonymous function as the first positional argument.
 function run_step!(operation::Function,receipt,name::String)
     started = time()
     receipt["steps"][name] = Dict(
-        "status" => "RUNNING",
-        "started_at" => string(Dates.now()),
+        "status" => "RUNNING","started_at" => string(Dates.now()),
     )
     write_receipt(receipt)
     try
         operation()
         receipt["steps"][name] = Dict(
-            "status" => "PASS",
-            "duration_s" => time()-started,
+            "status" => "PASS","duration_s" => time()-started,
             "completed_at" => string(Dates.now()),
         )
         write_receipt(receipt)
         return true
     catch exception
-        message = sprint(showerror,exception,catch_backtrace())
         receipt["steps"][name] = Dict(
-            "status" => "FAIL",
-            "duration_s" => time()-started,
+            "status" => "FAIL","duration_s" => time()-started,
             "completed_at" => string(Dates.now()),
-            "error" => message,
+            "error" => sprint(showerror,exception,catch_backtrace()),
         )
         receipt["overall_status"] = "FAIL"
         write_receipt(receipt)
@@ -79,7 +74,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v1",
+        "schema" => "radiant.julia_qualification/v2",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -98,6 +93,11 @@ function main()
         "gates" => Dict{String,Any}(
             "RADIANT_BUILD_PASS" => false,
             "HTS_ADDON_SOFTWARE_PASS" => false,
+            "SPATIAL_FIELD_SOFTWARE_PASS" => false,
+            "FACETED_GEOMETRY_SOFTWARE_PASS" => false,
+            "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
+            "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
+            "CLOSED_COUPLING_SOFTWARE_PASS" => false,
             "RADIANT_EM_PASS" => false,
             "PHYSICAL_OPENMC_REPLAY_PASS" => false,
             "PHYSICAL_OPENSN_REPLAY_PASS" => false,
@@ -116,7 +116,6 @@ function main()
     run_step!(receipt,"precompile") do
         Pkg.precompile()
     end
-
     run_step!(receipt,"package_import") do
         @eval using Radiant
         nothing
@@ -127,31 +126,34 @@ function main()
     run_step!(receipt,"package_tests") do
         Pkg.test(;coverage=false)
     end
-
     run_step!(receipt,"extended_hts_tests") do
         include(joinpath(ROOT,"test","hts_extended_tests.jl"))
     end
-
     run_step!(receipt,"hts_addon_tests") do
         include(joinpath(ROOT,"test","hts_addon_tests.jl"))
     end
-    receipt["gates"]["HTS_ADDON_SOFTWARE_PASS"] = true
+    run_step!(receipt,"hts_production_foundations_tests") do
+        include(joinpath(ROOT,"test","hts_production_foundations_tests.jl"))
+    end
+    for gate in (
+        "HTS_ADDON_SOFTWARE_PASS","SPATIAL_FIELD_SOFTWARE_PASS",
+        "FACETED_GEOMETRY_SOFTWARE_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
+        "ATOMISTIC_RESPONSE_PIPELINE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
+    )
+        receipt["gates"][gate] = true
+    end
     write_receipt(receipt)
 
     run_step!(receipt,"hdf5_interchange_tests") do
         include(joinpath(ROOT,"test","hdf5_interchange_tests.jl"))
     end
-
     run_step!(receipt,"radiant_em_analytic") do
         run_subqualification("run_radiant_em_analytic.jl")
     end
-
     run_step!(receipt,"opensn_radiant_fixture_replay") do
         run_subqualification("run_opensn_radiant_fixture_replay.jl")
     end
 
-    # Software/analytic fixtures do not establish physical EM, OpenMC, OpenSn, curved-atlas, or
-    # production-coupling gates. Those remain false until separately hash-bound receipts pass.
     receipt["overall_status"] = "PASS"
     receipt["completed_at"] = string(Dates.now())
     receipt["manifest_sha256_final"] = file_sha256(joinpath(ROOT,"Manifest.toml"))
