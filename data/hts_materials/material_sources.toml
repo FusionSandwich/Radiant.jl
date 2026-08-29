@@ -1,0 +1,139 @@
+schema = "radiant.hts.material_sources/v1"
+classification = "source-registry-not-physical-qualification"
+future_package = "RadiantHTS.jl"
+
+[policy]
+no_silent_extrapolation = true
+no_silent_ybco_to_gdbco_substitution = true
+retain_material_state_hash = true
+retain_oxygen_content = true
+retain_field_orientation = true
+retain_damage_state = true
+retain_uncertainty = true
+
+[[source]]
+id = "NIST-CRYO-OFHC-CU"
+material = "Cu"
+properties = ["specific_heat", "thermal_conductivity"]
+source_type = "official-evaluated-fit"
+url = "https://trc.nist.gov/cryogenics/materials/OFHC%20Copper/OFHC_Copper_rev1.htm"
+reference = "N. J. Simon, E. S. Drexler, and R. P. Reed, Properties of Copper and Copper Alloys at Cryogenic Temperatures, NIST Monograph 177 (1992)."
+implemented = true
+implementation = "default_material_response_registry"
+validity_note = "Thermal-conductivity fit is purity/RRR dependent; tape copper must retain an RRR or irradiation-state identifier."
+
+[[source]]
+id = "NIST-CRYO-KAPTON"
+material = "Kapton"
+properties = ["specific_heat", "thermal_conductivity"]
+source_type = "official-evaluated-fit"
+url = "https://trc.nist.gov/cryogenics/materials/Polyimide%20Kapton/PolyimideKapton_rev.htm"
+implemented = true
+implementation = "default_material_response_registry"
+validity_note = "Apply only within the NIST fit range and preserve film orientation/manufacturing metadata where available."
+
+[[source]]
+id = "NIST-CRYO-G10"
+material = "G10"
+properties = ["specific_heat", "normal_thermal_conductivity", "warp_thermal_conductivity"]
+source_type = "official-evaluated-fit"
+url = "https://trc.nist.gov/cryogenics/materials/G-10%20CR%20Fiberglass%20Epoxy/G10CRFiberglassEpoxy_rev.htm"
+implemented = true
+implementation = "default_material_response_registry"
+validity_note = "Normal and warp directions are distinct and must not be averaged implicitly."
+
+[[source]]
+id = "HASTELLOY-C276-JAP-2008"
+material = "Hastelloy-C276"
+properties = ["specific_heat", "thermal_conductivity", "thermal_diffusivity", "electrical_resistivity"]
+source_type = "primary-measurement"
+doi = "10.1063/1.2899058"
+reference = "Physical properties of Hastelloy C-276 at cryogenic temperatures, Journal of Applied Physics 103, 064908 (2008)."
+implemented = false
+next_step = "Digitize or obtain machine-readable tables from 2--300 K, bind alloy heat treatment and uncertainty, then register as Tabulated_Material_Property."
+
+[[source]]
+id = "YBCO-CC-CP-2012"
+material = "YBCO-coated-conductor"
+properties = ["specific_heat", "thermal_diffusivity"]
+source_type = "primary-measurement"
+doi = "10.1016/j.phpro.2012.06.316"
+reference = "Specific Heat and Thermal Diffusivity of YBCO Coated Conductors, Physics Procedia 36, 1609--1613 (2012)."
+implemented = false
+next_step = "Digitize constituent and full-tape curves; preserve exact tape architecture and uncertainty."
+
+[[source]]
+id = "YBCO-SINGLE-CRYSTAL-K-1989"
+material = "YBCO"
+properties = ["thermal_conductivity_ab", "thermal_conductivity_c"]
+source_type = "primary-measurement"
+doi = "10.1103/PhysRevB.40.9389"
+reference = "S. J. Hagen, Z. Z. Wang, and N. P. Ong, Anisotropy of the thermal conductivity of YBa2Cu3O7-y, Physical Review B 40, 9389 (1989)."
+implemented = false
+next_step = "Digitize orientation-resolved curves and retain oxygen content, twinning, field, and sample-state metadata."
+
+[[source]]
+id = "YBCO-SPECIFIC-HEAT-1997"
+material = "YBCO"
+properties = ["specific_heat_low_temperature", "field_dependent_specific_heat"]
+source_type = "primary-measurement"
+doi = "10.1103/PhysRevB.55.3954"
+reference = "K. A. Moler et al., Specific heat of YBa2Cu3O7-delta, Physical Review B 55, 3954 (1997)."
+implemented = false
+next_step = "Use as a low-temperature, oxygen- and field-state-specific dataset rather than a generic coated-conductor fit."
+
+[[source]]
+id = "YBCO-ULTRAFAST-1996"
+material = "YBCO"
+properties = ["electron_thermalization_time", "electron_phonon_relaxation_time"]
+source_type = "primary-measurement"
+doi = "10.1109/2944.571767"
+reference = "M. Lindgren et al., Ultrafast photoresponse in microbridges and pulse propagation in YBCO transmission lines, IEEE Journal of Selected Topics in Quantum Electronics 2, 668--678 (1996)."
+implemented = false
+next_step = "Register only as a device/state-specific candidate non-equilibrium model with explicit temperature, film, bias, and pulse metadata."
+
+[[source]]
+id = "YBCO-ULTRAFAST-1999"
+material = "YBCO"
+properties = ["electron_thermalization_time", "electron_phonon_relaxation_time", "phonon_electron_scattering_time", "quasiparticle_lifetime"]
+source_type = "primary-measurement"
+doi = "10.1063/1.123388"
+reference = "M. Lindgren et al., Intrinsic picosecond response times of Y-Ba-Cu-O superconducting photodetectors, Applied Physics Letters 74, 853--855 (1999)."
+implemented = false
+next_step = "Use to constrain candidate Rothwarf-Taylor/two-temperature tables; do not generalize to fusion-dose steady state without a state model."
+
+[[source]]
+id = "YBCO-TIME-RESOLVED-RAMAN-2021"
+material = "YBa2Cu3O6+x"
+properties = ["phonon_population_relaxation", "electron_phonon_coupling"]
+source_type = "primary-measurement-and-theory"
+doi = "10.1103/PhysRevB.104.L180505"
+reference = "N. Pellatz et al., Relaxation timescales and electron-phonon coupling in optically pumped YBa2Cu3O6+x revealed by time-resolved Raman scattering, Physical Review B 104, L180505 (2021)."
+implemented = false
+next_step = "Use as a mode-specific calibration/validation target for EPW or non-equilibrium phonon models."
+
+[[source]]
+id = "GDBCO-GENERATION-ROUTE"
+material = "GdBCO"
+properties = ["specific_heat", "thermal_conductivity_tensor", "subkev_partition", "electron_phonon_relaxation", "defect_storage"]
+source_type = "generated-response-plan"
+implemented = false
+next_step = "Generate GdBCO-specific phonon, phono3py/Green-Kubo, EPW, RT-TDDFT, and cascade-MD tables. YBCO may only be used as a labelled surrogate with an explicit model-discrepancy uncertainty."
+
+[[source]]
+id = "IAEA-PGAA-GD"
+material = "Gd-155/Gd-157"
+properties = ["capture_gamma_energy", "capture_gamma_intensity"]
+source_type = "official-evaluated-database"
+url = "https://www-nds.iaea.org/pgaa/"
+implemented = false
+next_step = "Acquire isotope-resolved evaluated data and retain database version/hash. Gamma data alone are insufficient for complete conversion-electron, Auger, and recoil energy closure."
+
+[[source]]
+id = "GEANT4-PHOTON-EVAPORATION-RELAXATION"
+material = "Gd-155/Gd-157"
+properties = ["internal_conversion", "atomic_relaxation", "auger_electrons", "x_rays"]
+source_type = "official-physics-model-and-data"
+url = "https://geant4.web.cern.ch/documentation/"
+implemented = false
+next_step = "Generate event-level capture/de-excitation reference samples with pinned Geant4 and G4NDL/PhotonEvaporation data versions; compare mean spectra and energy closure before normalizing into Radiant sources."
