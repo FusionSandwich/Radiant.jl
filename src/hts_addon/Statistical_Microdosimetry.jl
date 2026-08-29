@@ -1,0 +1,483 @@
+const MICRODOSIMETRY_PARTITION_CHANNELS = (
+    :ionization,
+    :electronic_excitation,
+    :prompt_lattice_heat,
+    :nuclear_recoil_handoff,
+    :defect_storage,
+    :optical_emission,
+    :escaping_particle,
+    :cutoff_handoff,
+    :unresolved,
+)
+
+struct Event_Energy_Partition_Fractions
+    fractions::Dict{Symbol,Float64}
+
+    function Event_Energy_Partition_Fractions(
+        fractions::AbstractDict;
+        closure_tolerance::Real=1.0e-10,
+    )
+        output = Dict{Symbol,Float64}()
+        for channel in MICRODOSIMETRY_PARTITION_CHANNELS
+            haskey(fractions,channel) || error(
+                "Microdosimetry partition is missing channel $(channel).",
+            )
+            value = Float64(fractions[channel])
+            isfinite(value) && value ≥ 0.0 && value ≤ 1.0 || error(
+                "Microdosimetry partition fractions must lie in [0,1].",
+            )
+            output[channel] = value
+        end
+        isapprox(
+            sum(values(output)),1.0;
+            rtol=closure_tolerance,atol=closure_tolerance,
+        ) || error("Microdosimetry partition fractions must sum to one.")
+        return new(output)
+    end
+end
+
+function energy_partition_from_fractions(
+    fractions::Event_Energy_Partition_Fractions,
+    deposited_energy_eV::Real;
+    label::AbstractString="microdosimetry-event",
+    metadata::AbstractDict=Dict{String,String}(),
+)
+    energy = Float64(deposited_energy_eV)
+    isfinite(energy) && energy ≥ 0.0 || error("Deposited event energy must be nonnegative.")
+    f = fractions.fractions
+    return Energy_Partition(
+        label=label,
+        available_energy_eV=energy,
+        ionization_eV=energy*f[:ionization],
+        electronic_excitation_eV=energy*f[:electronic_excitation],
+        prompt_lattice_heat_eV=energy*f[:prompt_lattice_heat],
+        nuclear_recoil_handoff_eV=energy*f[:nuclear_recoil_handoff],
+        defect_stored_eV=energy*f[:defect_storage],
+        optical_emission_eV=energy*f[:optical_emission],
+        escaping_particle_eV=energy*f[:escaping_particle],
+        cutoff_handoff_eV=energy*f[:cutoff_handoff],
+        unresolved_eV=energy*f[:unresolved],
+        metadata=metadata,
+    )
+end
+
+"""One secondary emitted in correlation with the parent event prototype."""
+struct Correlated_Secondary
+    particle_tag::String
+    kinetic_energy_eV::Float64
+    direction_model::Symbol
+    correlation_id::String
+    metadata::Dict{String,String}
+
+    function Correlated_Secondary(
+        particle_tag::AbstractString,
+        kinetic_energy_eV::Real;
+        direction_model::Symbol=:isotropic,
+        correlation_id::AbstractString="uncorrelated",
+        metadata::AbstractDict=Dict{String,String}(),
+    )
+        isempty(particle_tag) && error("Secondary particle tag cannot be empty.")
+        energy = Float64(kinetic_energy_eV)
+        isfinite(energy) && energy ≥ 0.0 || error("Secondary energy must be nonnegative.")
+        direction_model in (:fixed,:isotropic,:parent_correlated) || error(
+            "Unknown secondary direction model: $(direction_model).",
+        )
+        isempty(correlation_id) && error("Secondary correlation identifier cannot be empty.")
+        metadata_string = Dict{String,String}()
+        for (key,value) in metadata
+            metadata_string[string(key)] = string(value)
+        end
+        return new(
+            String(particle_tag),energy,direction_model,String(correlation_id),metadata_string,
+        )
+    end
+end
+
+"""Positive energy-loss straggling model used by one event prototype."""
+struct Energy_Straggling_Model
+    distribution::Symbol
+    relative_sigma::Float64
+    maximum_deposited_energy_eV::Float64
+    model_hash::String
+    qualification_status::Symbol
+
+    function Energy_Straggling_Model(
+        distribution::Symbol;
+        relative_sigma::Real=0.0,
+        maximum_deposited_energy_eV::Real=Inf,
+        model_hash::AbstractString="unbound",
+        qualification_status::Symbol=:verification,
+    )
+        distribution in (:deterministic,:truncated_gaussian,:lognormal) || error(
+            "Straggling distribution must be deterministic, truncated_gaussian, or lognormal.",
+        )
+        sigma = Float64(relative_sigma)
+        maximum_energy = Float64(maximum_deposited_energy_eV)
+        isfinite(sigma) && sigma ≥ 0.0 || error("Relative straggling sigma must be nonnegative.")
+        (isfinite(maximum_energy) || isinf(maximum_energy)) && maximum_energy > 0.0 || error(
+            "Maximum deposited energy must be positive.",
+        )
+        distribution == :deterministic && sigma != 0.0 && error(
+            "Deterministic straggling requires zero relative sigma.",
+        )
+        qualification_status in (:verification,:candidate,:qualified) || error(
+            "Straggling qualification status is invalid.",
+        )
+        isempty(model_hash) && error("Straggling model hash cannot be empty.")
+        return new(distribution,sigma,maximum_energy,String(model_hash),qualification_status)
+    end
+end
+
+"""Representative event outcome with an expected physical rate."""
+struct Microdosimetry_Event_Prototype
+    prototype_id::String
+    particle_tag::String
+    process_id::String
+    material_tag::String
+    layer_id::String
+    position_cm::NTuple{3,Float64}
+    direction_model::Symbol
+    fixed_direction::NTuple{3,Float64}
+    incident_energy_eV::Float64
+    mean_deposited_energy_eV::Float64
+    event_rate_per_s::Float64
+    straggling::Energy_Straggling_Model
+    partition_fractions::Event_Energy_Partition_Fractions
+    correlated_secondaries::Vector{Correlated_Secondary}
+    correlation_id::String
+    provenance::Dict{String,String}
+
+    function Microdosimetry_Event_Prototype(;
+        prototype_id::AbstractString,
+        particle_tag::AbstractString,
+        process_id::AbstractString,
+        material_tag::AbstractString,
+        layer_id::AbstractString,
+        position_cm::AbstractVector{<:Real},
+        direction_model::Symbol=:isotropic,
+        fixed_direction::AbstractVector{<:Real}=[1.0,0.0,0.0],
+        incident_energy_eV::Real,
+        mean_deposited_energy_eV::Real,
+        event_rate_per_s::Real,
+        straggling::Energy_Straggling_Model=Energy_Straggling_Model(:deterministic),
+        partition_fractions::Event_Energy_Partition_Fractions,
+        correlated_secondaries::AbstractVector{Correlated_Secondary}=Correlated_Secondary[],
+        correlation_id::AbstractString="uncorrelated",
+        provenance::AbstractDict=Dict{String,String}(),
+    )
+        for (name,value) in (
+            ("prototype",prototype_id),("particle",particle_tag),("process",process_id),
+            ("material",material_tag),("layer",layer_id),("correlation",correlation_id),
+        )
+            isempty(value) && error("Microdosimetry $(name) identifier cannot be empty.")
+        end
+        position = Float64.(position_cm)
+        length(position) == 3 && all(isfinite,position) || error(
+            "Microdosimetry position must be a finite three-vector.",
+        )
+        direction_model in (:fixed,:isotropic) || error(
+            "Prototype direction model must be :fixed or :isotropic.",
+        )
+        direction = _atlas_normalize(fixed_direction,"prototype fixed direction")
+        incident = Float64(incident_energy_eV)
+        deposited = Float64(mean_deposited_energy_eV)
+        rate = Float64(event_rate_per_s)
+        isfinite(incident) && incident > 0.0 || error("Incident energy must be positive.")
+        isfinite(deposited) && deposited ≥ 0.0 && deposited ≤ incident || error(
+            "Mean deposited energy must lie between zero and incident energy.",
+        )
+        isfinite(rate) && rate ≥ 0.0 || error("Event rate must be nonnegative.")
+        straggling.maximum_deposited_energy_eV < deposited && error(
+            "Straggling maximum lies below the mean deposited energy.",
+        )
+        provenance_string = Dict{String,String}()
+        for (key,value) in provenance
+            provenance_string[string(key)] = string(value)
+        end
+        return new(
+            String(prototype_id),String(particle_tag),String(process_id),String(material_tag),
+            String(layer_id),(position[1],position[2],position[3]),direction_model,
+            (direction[1],direction[2],direction[3]),incident,deposited,rate,straggling,
+            partition_fractions,Correlated_Secondary[correlated_secondaries...],
+            String(correlation_id),provenance_string,
+        )
+    end
+end
+
+struct Microdosimetry_Kernel
+    schema::String
+    prototypes::Vector{Microdosimetry_Event_Prototype}
+    source_artifact_hash::String
+    geometry_hash::String
+    material_state_hash::String
+    normalization_basis::Symbol
+    metadata::Dict{String,String}
+
+    function Microdosimetry_Kernel(
+        prototypes::AbstractVector{Microdosimetry_Event_Prototype};
+        source_artifact_hash::AbstractString,
+        geometry_hash::AbstractString,
+        material_state_hash::AbstractString,
+        normalization_basis::Symbol=:physical_rate,
+        metadata::AbstractDict=Dict{String,String}(),
+    )
+        prototype_vector = Microdosimetry_Event_Prototype[prototypes...]
+        isempty(prototype_vector) && error("Microdosimetry kernel cannot be empty.")
+        identifiers = getfield.(prototype_vector,:prototype_id)
+        length(unique(identifiers)) == length(identifiers) || error(
+            "Microdosimetry prototype identifiers must be unique.",
+        )
+        for value in (source_artifact_hash,geometry_hash,material_state_hash)
+            isempty(value) && error("Microdosimetry lineage hashes cannot be empty.")
+        end
+        normalization_basis in (:physical_rate,:per_history) || error(
+            "Microdosimetry normalization must be :physical_rate or :per_history.",
+        )
+        metadata_string = Dict{String,String}()
+        for (key,value) in metadata
+            metadata_string[string(key)] = string(value)
+        end
+        return new(
+            "radiant.hts.microdosimetry_kernel/v1",prototype_vector,
+            String(source_artifact_hash),String(geometry_hash),String(material_state_hash),
+            normalization_basis,metadata_string,
+        )
+    end
+end
+
+struct Weighted_Microdosimetry_Event
+    sample_id::Int64
+    prototype_id::String
+    particle_tag::String
+    process_id::String
+    material_tag::String
+    layer_id::String
+    time_s::Float64
+    position_cm::NTuple{3,Float64}
+    direction::NTuple{3,Float64}
+    incident_energy_eV::Float64
+    deposited_energy_eV::Float64
+    partition::Energy_Partition
+    statistical_weight_events::Float64
+    correlated_secondaries::Vector{Correlated_Secondary}
+    correlation_id::String
+    provenance::Dict{String,String}
+end
+
+function _sample_isotropic_direction(rng::Random.AbstractRNG)
+    cosine = 2.0*rand(rng)-1.0
+    azimuth = 2.0*π*rand(rng)
+    sine = sqrt(max(0.0,1.0-cosine^2))
+    return (sine*cos(azimuth),sine*sin(azimuth),cosine)
+end
+
+function _sample_deposited_energy(
+    rng::Random.AbstractRNG,
+    mean_energy_eV::Float64,
+    model::Energy_Straggling_Model;
+    maximum_attempts::Integer=10_000,
+)
+    model.distribution == :deterministic && return mean_energy_eV
+    mean_energy_eV == 0.0 && return 0.0
+    sigma = model.relative_sigma*mean_energy_eV
+    sigma == 0.0 && return mean_energy_eV
+    for _ in 1:maximum_attempts
+        value = if model.distribution == :truncated_gaussian
+            mean_energy_eV+sigma*randn(rng)
+        else
+            variance = sigma^2
+            log_sigma2 = log1p(variance/mean_energy_eV^2)
+            log_mu = log(mean_energy_eV)-0.5*log_sigma2
+            exp(log_mu+sqrt(log_sigma2)*randn(rng))
+        end
+        if value ≥ 0.0 && value ≤ model.maximum_deposited_energy_eV
+            return value
+        end
+    end
+    error(
+        "Straggling sampler could not draw an admissible energy without clipping; " *
+        "revise the distribution or physical upper bound.",
+    )
+end
+
+"""
+    sample_microdosimetry_events(kernel, sample_count; time_window_s=(0,1), seed=0)
+
+Systematic weighted sampling of deterministic event rates. Samples are representative weighted
+events, not analog histories. Their weights sum to the expected number of physical events in the
+requested time window. Correlated secondaries remain attached to their parent prototype.
+"""
+function sample_microdosimetry_events(
+    kernel::Microdosimetry_Kernel,
+    sample_count::Integer;
+    time_window_s::Tuple{<:Real,<:Real}=(0.0,1.0),
+    seed::Integer=0,
+)
+    sample_count ≥ 1 || error("Microdosimetry sample count must be positive.")
+    kernel.normalization_basis == :physical_rate || error(
+        "Time-window sampling requires physical event rates.",
+    )
+    t0 = Float64(time_window_s[1])
+    t1 = Float64(time_window_s[2])
+    isfinite(t0) && isfinite(t1) && t1 > t0 || error(
+        "Microdosimetry time window must be finite and increasing.",
+    )
+    rates = getfield.(kernel.prototypes,:event_rate_per_s)
+    total_rate = sum(rates)
+    total_rate > 0.0 || error("Microdosimetry kernel has zero total event rate.")
+    cumulative = cumsum(rates)
+    rng = Random.MersenneTwister(seed)
+    spacing = total_rate/sample_count
+    offset = rand(rng)*spacing
+    expected_events = total_rate*(t1-t0)
+    event_weight = expected_events/sample_count
+    output = Weighted_Microdosimetry_Event[]
+
+    prototype_index = 1
+    for sample_id in 1:sample_count
+        target = offset+(sample_id-1)*spacing
+        while prototype_index < length(cumulative) && target > cumulative[prototype_index]
+            prototype_index += 1
+        end
+        prototype = kernel.prototypes[prototype_index]
+        deposited = _sample_deposited_energy(
+            rng,prototype.mean_deposited_energy_eV,prototype.straggling,
+        )
+        deposited ≤ prototype.incident_energy_eV || error(
+            "Sampled deposited energy exceeds incident energy; no clipping is permitted.",
+        )
+        direction = prototype.direction_model == :isotropic ?
+            _sample_isotropic_direction(rng) : prototype.fixed_direction
+        event_time = t0+(t1-t0)*rand(rng)
+        partition = energy_partition_from_fractions(
+            prototype.partition_fractions,deposited;
+            label=prototype.process_id,
+            metadata=Dict(
+                "prototype_id" => prototype.prototype_id,
+                "straggling_model_hash" => prototype.straggling.model_hash,
+                "source_artifact_hash" => kernel.source_artifact_hash,
+                "geometry_hash" => kernel.geometry_hash,
+                "material_state_hash" => kernel.material_state_hash,
+            ),
+        )
+        push!(output,Weighted_Microdosimetry_Event(
+            Int64(sample_id),prototype.prototype_id,prototype.particle_tag,
+            prototype.process_id,prototype.material_tag,prototype.layer_id,event_time,
+            prototype.position_cm,direction,prototype.incident_energy_eV,deposited,partition,
+            event_weight,copy(prototype.correlated_secondaries),prototype.correlation_id,
+            merge(
+                copy(prototype.provenance),
+                Dict(
+                    "kernel_schema" => kernel.schema,
+                    "sampling" => "systematic-weighted",
+                    "seed" => string(seed),
+                ),
+            ),
+        ))
+    end
+    return output
+end
+
+function microdosimetry_effective_sample_size(events::AbstractVector{Weighted_Microdosimetry_Event})
+    isempty(events) && return 0.0
+    weights = getfield.(events,:statistical_weight_events)
+    denominator = sum(abs2,weights)
+    denominator == 0.0 && return 0.0
+    return sum(weights)^2/denominator
+end
+
+function weighted_deposited_energy_mean(events::AbstractVector{Weighted_Microdosimetry_Event})
+    isempty(events) && error("Cannot calculate a microdosimetry mean from no events.")
+    weights = getfield.(events,:statistical_weight_events)
+    total_weight = sum(weights)
+    total_weight > 0.0 || error("Microdosimetry event weights must sum to a positive value.")
+    return sum(
+        event.statistical_weight_events*event.deposited_energy_eV for event in events
+    )/total_weight
+end
+
+function weighted_deposited_energy_variance(events::AbstractVector{Weighted_Microdosimetry_Event})
+    mean_value = weighted_deposited_energy_mean(events)
+    weights = getfield.(events,:statistical_weight_events)
+    total_weight = sum(weights)
+    return sum(
+        event.statistical_weight_events*(event.deposited_energy_eV-mean_value)^2
+        for event in events
+    )/total_weight
+end
+
+function detector_trigger_probability(
+    events::AbstractVector{Weighted_Microdosimetry_Event},
+    threshold_eV::Real,
+)
+    threshold = Float64(threshold_eV)
+    isfinite(threshold) && threshold ≥ 0.0 || error("Detector threshold must be nonnegative.")
+    isempty(events) && return 0.0
+    total_weight = sum(event.statistical_weight_events for event in events)
+    total_weight > 0.0 || return 0.0
+    triggered = sum(
+        event.statistical_weight_events for event in events
+        if event.deposited_energy_eV ≥ threshold
+    )
+    return triggered/total_weight
+end
+
+function expected_specific_energy_Gy(
+    events::AbstractVector{Weighted_Microdosimetry_Event},
+    sensitive_mass_kg::Real,
+)
+    mass = Float64(sensitive_mass_kg)
+    isfinite(mass) && mass > 0.0 || error("Sensitive mass must be finite and positive.")
+    energy_eV = sum(
+        event.statistical_weight_events*event.deposited_energy_eV for event in events
+    )
+    return energy_eV*1.602176634e-19/mass
+end
+
+function synthetic_microdosimetry_kernel_fixture()
+    fractions = Event_Energy_Partition_Fractions(Dict(
+        :ionization => 0.20,
+        :electronic_excitation => 0.10,
+        :prompt_lattice_heat => 0.40,
+        :nuclear_recoil_handoff => 0.10,
+        :defect_storage => 0.05,
+        :optical_emission => 0.05,
+        :escaping_particle => 0.05,
+        :cutoff_handoff => 0.05,
+        :unresolved => 0.0,
+    ))
+    prototype = Microdosimetry_Event_Prototype(
+        prototype_id="synthetic-event",
+        particle_tag="electron",
+        process_id="synthetic-ionization",
+        material_tag="YBCO",
+        layer_id="REBCO",
+        position_cm=[0.0,0.0,0.0],
+        direction_model=:isotropic,
+        incident_energy_eV=1000.0,
+        mean_deposited_energy_eV=500.0,
+        event_rate_per_s=100.0,
+        straggling=Energy_Straggling_Model(
+            :lognormal;
+            relative_sigma=0.2,
+            maximum_deposited_energy_eV=1000.0,
+            model_hash="synthetic-straggling",
+            qualification_status=:verification,
+        ),
+        partition_fractions=fractions,
+        correlated_secondaries=[
+            Correlated_Secondary(
+                "photon",50.0;
+                correlation_id="synthetic-bundle",
+            ),
+        ],
+        correlation_id="synthetic-bundle",
+    )
+    return Microdosimetry_Kernel(
+        [prototype];
+        source_artifact_hash="synthetic-source",
+        geometry_hash="synthetic-geometry",
+        material_state_hash="synthetic-material-state",
+        metadata=Dict("classification" => "verification-only"),
+    )
+end
