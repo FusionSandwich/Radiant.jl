@@ -1,0 +1,56 @@
+name: HTS add-on tests
+
+on:
+  push:
+    branches:
+      - 'codex/**'
+  workflow_dispatch:
+
+concurrency:
+  group: hts-addon-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Julia ${{ matrix.julia-version }} extraction-ready add-on
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version:
+          - '1.6.7'
+          - '1.10.12'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: ${{ matrix.julia-version }}
+          arch: x64
+      - uses: julia-actions/cache@v3
+      - name: Instantiate and precompile
+        run: julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+      - name: Run HTS add-on regression tests
+        run: julia --project=. test/hts_addon_tests.jl
+      - name: Record branch-only qualification
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts/hts-addon
+          {
+            echo 'schema = "radiant.hts_addon_test_receipt/v1"'
+            echo 'branch_policy = "branch-only-no-pr"'
+            echo 'future_package = "RadiantHTS.jl"'
+            echo 'julia_version = "${{ matrix.julia-version }}"'
+            echo 'commit = "${{ github.sha }}"'
+            echo 'workflow_status = "${{ job.status }}"'
+          } > artifacts/hts-addon/receipt-julia-${{ matrix.julia-version }}.toml
+      - name: Upload add-on qualification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hts-addon-julia-${{ matrix.julia-version }}
+          path: artifacts/hts-addon
+          if-no-files-found: error
