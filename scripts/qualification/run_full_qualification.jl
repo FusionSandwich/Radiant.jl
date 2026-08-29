@@ -18,7 +18,6 @@ function file_sha256(path::AbstractString)
     end
 end
 
-# Julia do-block syntax passes the anonymous function first.
 function record_step!(
     operation::Function,
     receipt::Dict{String,Any},
@@ -60,11 +59,19 @@ function verify_hash_bound_receipt(
     return artifact_path,TOML.parsefile(artifact_path)
 end
 
+function julia_commit_string()
+    try
+        return string(Base.GIT_VERSION_INFO.commit)
+    catch
+        return "unavailable"
+    end
+end
+
 receipt = Dict{String,Any}(
     "schema" => "radiant.qualification_receipt/v2",
     "started_utc" => string(Dates.now(Dates.UTC)),
     "julia_version" => string(VERSION),
-    "julia_commit" => try string(Base.GIT_VERSION_INFO.commit) catch; "unavailable" end,
+    "julia_commit" => julia_commit_string(),
     "platform" => string(Sys.MACHINE),
     "threads" => Threads.nthreads(),
     "project_sha256" => file_sha256(joinpath(ROOT,"Project.toml")),
@@ -276,10 +283,10 @@ finally
     receipt["finished_utc"] = string(Dates.now(Dates.UTC))
     receipt["overall_status"] = exit_code == 0 ? "PASS" : "FAIL"
     open(receipt_path,"w") do io
-        TOML.print(io,receipt;sorted=true)
+        TOML.print(io,receipt)
     end
     println("Qualification receipt: $(receipt_path)")
-    println("Overall status: $(receipt[\"overall_status\"])")
+    println("Overall status: "*string(receipt["overall_status"]))
 end
 
 exit(exit_code)
