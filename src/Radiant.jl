@@ -1,22 +1,16 @@
 module Radiant
 
-    #----
-    # External packages
-    #----
     import Base.println
     using Printf: @sprintf
     using LinearAlgebra
     using HDF5
     using JLD2
+    using Random
     using SHA
     using SpecialFunctions
 
-    # Load version-gated compatibility methods before any source files are evaluated.
     include("tools/julia_compat.jl")
 
-    #----
-    # Include files
-    #----
     radiant_src = Dict{String,Vector{String}}()
     radiant_src["cross_sections/"] = [
         "read_fmac_m.jl",
@@ -204,20 +198,29 @@ module Radiant
     radiant_src["interchange/"] = [
         "source_hdf5.jl"
     ]
-    for folder in ["structures/","tools/","cross_sections/","particle_transport/","interchange/"]
+    radiant_src["hts_addon/"] = [
+        "Addon_Extraction_Manifest.jl",
+        "Process_Resolved_Scoring.jl",
+        "Spatial_Magnetic_Field_Map.jl",
+        "Piecewise_Flat_Tape_Atlas.jl",
+        "Gd_Prompt_Capture_Cascade.jl",
+        "SubkeV_Thermalization.jl",
+        "Statistical_Microdosimetry.jl",
+        "Cryogenic_Electrothermal.jl"
+    ]
+    for folder in [
+        "structures/","tools/","cross_sections/","particle_transport/","interchange/",
+        "hts_addon/",
+    ]
         for file in radiant_src[folder]
             include(string(folder,file))
         end
     end
 
-    # Export all generated material constructors (from structures/Material_list.jl).
     if isdefined(@__MODULE__, :MATERIAL_CONSTRUCTORS)
         eval(Expr(:export, getfield(@__MODULE__, :MATERIAL_CONSTRUCTORS)...))
     end
 
-    #----
-    # Export objects
-    #----
     export Particle,Photon,Electron,Positron,Proton,Antiproton,Alpha,Muon,Antimuon
     export Elastic_Collision,Elastic_Scattering,Inelastic_Collision,Bremsstrahlung,Compton
     export Pair_Production,Photoelectric,Annihilation,Rayleigh,Relaxation,Fluorescence,Auger
@@ -225,7 +228,6 @@ module Radiant
     export Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
     export Discrete_Ordinates
 
-    # HTS deterministic-coupling foundations.
     export Source_Normalization,get_physical_scale,get_duration,apply_normalization
     export Abstract_Radiant_Source,Boundary_Angular_Current_Source
     export get_incoming_current_density,get_incoming_current,get_total_incoming_current
@@ -240,7 +242,6 @@ module Radiant
     export Layer_Definition,Tape_Stack_Definition,get_total_thickness,get_layer_boundaries
     export get_layer_index,verification_eight_layer_stack
 
-    # High-fidelity deposition, diagnostic, detector, and qualification contracts.
     export Energy_Partition,get_accounted_energy,get_energy_partition_residual
     export get_relative_energy_partition_residual,is_energy_partition_closed
     export is_energy_partition_resolved,get_prompt_heat_fraction
@@ -253,14 +254,60 @@ module Radiant
     export Protected_Response,Protected_Response_Registry,get_protected_response
     export response_is_converged,default_hts_protected_responses
 
-    # Hash-bound OpenMC/OpenSn/Radiant source interchange.
     export BOUNDARY_SOURCE_HDF5_SCHEMA,VOLUME_SOURCE_HDF5_SCHEMA
     export write_boundary_angular_current_hdf5,read_boundary_angular_current_hdf5
     export write_anisotropic_volume_source_hdf5,read_anisotropic_volume_source_hdf5
 
-    #----
-    # Execution of Radiant script files
-    #----
+    # Generic response-channel hook retained in Radiant core.
+    export add_response_channel!,set_response_channel!,has_response_channel
+    export get_response_channel,get_response_channel_keys,get_response_channels
+    export sum_response_channels
+
+    # Temporary extraction-ready HTS add-on.
+    export HTS_Addon_Component,HTS_Addon_Extraction_Manifest
+    export default_hts_addon_extraction_manifest,validate_addon_extraction_manifest
+    export get_addon_component
+
+    export Process_Resolved_Score,score_process_responses,get_process_score,get_process_keys
+    export assert_process_score_closure,aggregate_process_scores
+
+    export Abstract_Spatial_Magnetic_Field,Constant_Magnetic_Field
+    export Cartesian_Magnetic_Field_Map,field_at,field_in_local_frame
+    export electromagnetic_field_at,field_on_geometry,field_variation_bound,field_map_receipt
+
+    export Tape_Atlas_Patch,Piecewise_Flat_Tape_Atlas,patch_frame
+    export build_piecewise_flat_tape_atlas,global_to_patch_coordinates
+    export patch_to_global_coordinates,global_direction_to_patch,patch_direction_to_global
+    export electromagnetic_field_for_patch,get_atlas_patch,get_atlas_patch_at_arc_length
+    export atlas_refinement_report
+
+    export Capture_Emission_Line,Gd_Prompt_Capture_Cascade,Capture_Rate_Field
+    export Gd_Capture_Recoil_Source,Gd_Capture_Source_Bundle
+    export build_gd_capture_source_bundle,synthetic_gd157_capture_fixture
+
+    export SubkeV_Thermalization_Kernel,SubkeV_Thermalization_Result
+    export NonEquilibrium_Decay_Channel,NonEquilibrium_Thermalization_Model
+    export subkev_partition_fractions,thermalize_subkev_event,get_non_equilibrium_energy
+    export get_resolved_subkev_energy,is_subkev_partition_closed
+    export non_equilibrium_release,non_equilibrium_power,subkev_model_is_production_ready
+    export synthetic_subkev_kernel_fixture
+
+    export Event_Energy_Partition_Fractions,Correlated_Secondary,Energy_Straggling_Model
+    export Microdosimetry_Event_Prototype,Microdosimetry_Kernel
+    export Weighted_Microdosimetry_Event,energy_partition_from_fractions
+    export sample_microdosimetry_events,microdosimetry_effective_sample_size
+    export weighted_deposited_energy_mean,weighted_deposited_energy_variance
+    export detector_trigger_probability,expected_specific_energy_Gy
+    export synthetic_microdosimetry_kernel_fixture
+
+    export Tabulated_Cryogenic_Property,constant_cryogenic_property,property_value
+    export Cryogenic_Thermal_Node,Cryogenic_Thermal_Link
+    export HTS_Transition_Resistance_Model,effective_critical_temperature,hts_resistance
+    export Electrothermal_Circuit,Cryogenic_Electrothermal_Model
+    export Electrothermal_Energy_Impulse,Cryogenic_Electrothermal_Result
+    export simulate_cryogenic_electrothermal,peak_active_temperature,peak_voltage
+    export recovery_time_s,cryogenic_model_from_detector
+
     export @radiant_input
     macro radiant_input()
         return quote
