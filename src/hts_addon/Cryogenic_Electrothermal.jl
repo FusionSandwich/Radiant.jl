@@ -120,7 +120,9 @@ struct Cryogenic_Thermal_Link
         conductance_W_K::Tabulated_Cryogenic_Property;
         interface_hash::AbstractString,
     )
-        isempty(node_a) || isempty(node_b) && error("Thermal link node identifiers cannot be empty.")
+        (isempty(node_a) || isempty(node_b)) && error(
+            "Thermal link node identifiers cannot be empty.",
+        )
         node_a == node_b && error("Thermal link must connect two different nodes.")
         isempty(interface_hash) && error("Thermal interface hash cannot be empty.")
         return new(String(node_a),String(node_b),conductance_W_K,String(interface_hash))
@@ -385,7 +387,7 @@ function simulate_cryogenic_electrothermal(
         _circuit_current(model.circuit,0.0,resistances[1],times[2]-times[1])
     voltages[1] = currents[1]*resistances[1]
 
-    source_hashes = unique(getfield.(Electrothermal_Energy_Impulse[impulses...],:source_hash))
+    source_hashes = unique(String[impulse.source_hash for impulse in impulses])
     for step in 2:length(times)
         dt = times[step]-times[step-1]
         previous = view(temperatures,:,step-1)
