@@ -123,11 +123,11 @@ end
 end
 
 @testset "Piecewise-flat tape atlas" begin
-    values = zeros(Float64,3,2,1,1)
-    values[3,1,1,1] = 10.0
-    values[3,2,1,1] = 12.0
+    values = zeros(Float64,3,2,2,1)
+    values[3,1,:,:] .= 10.0
+    values[3,2,:,:] .= 12.0
     field = Cartesian_Magnetic_Field_Map(
-        [0.0,2.0],[0.0],[0.0],values;
+        [0.0,2.0],[0.0,0.1],[0.0],values;
         field_hash="atlas-field-map",
     )
     centerline = [
@@ -180,7 +180,7 @@ end
         :photon,:xray,:conversion_electron,:auger_electron,
     ])
     @test bundle.recoil_source !== nothing
-    @test maximum(abs.(bundle.energy_residual_eV_per_capture)) ≤ 1.0e-8
+    @test abs(bundle.energy_residual_eV_per_capture) ≤ 1.0e-8
     @test sum(get_volume_source_rate(bundle.sources[:photon])) ≈ 12.0
     @test sum(get_volume_source_rate(bundle.sources[:conversion_electron])) ≈ 3.0
     @test bundle.provenance["correlations_preserved_in_scalar_sources"] == "false"
