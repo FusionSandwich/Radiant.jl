@@ -1,12 +1,12 @@
 """
     Multigroup_Cross_Sections
 
-Structure used to multigroup cross-sections for a given particle.
-
+Multigroup transport data for one incoming particle and material. `response_channels` is a generic
+core hook used by the temporary HTS add-on to retain interaction-resolved deposition, charge,
+absorption, stopping-power, and momentum-transfer contributions. Channel keys and values are
+copied on insertion so downstream scoring cannot mutate the transport library silently.
 """
 mutable struct Multigroup_Cross_Sections
-
-    # Variable(s)
     number_of_groups               ::Int64
     total                          ::Union{Missing,Vector{Float64}}
     absorption                     ::Union{Missing,Vector{Float64}}
@@ -16,10 +16,10 @@ mutable struct Multigroup_Cross_Sections
     energy_deposition              ::Union{Missing,Vector{Float64}}
     charge_deposition              ::Union{Missing,Vector{Float64}}
     scattering                     ::Vector{Array{Float64,3}}
+    response_channels              ::Dict{String,Vector{Float64}}
 
-    # Constructor(s)
     function Multigroup_Cross_Sections(number_of_groups::Int64)
-
+        number_of_groups ≥ 1 || error("Multigroup data require at least one energy group.")
         this = new()
         this.number_of_groups = number_of_groups
         this.total = missing
@@ -30,284 +30,224 @@ mutable struct Multigroup_Cross_Sections
         this.energy_deposition = missing
         this.charge_deposition = missing
         this.scattering = Vector{Array{Float64,3}}()
-
+        this.response_channels = Dict{String,Vector{Float64}}()
         return this
     end
 end
 
-# Method(s)
-"""
-    set_total(this::Multigroup_Cross_Sections,total::Vector{Float64})
+function _validate_group_vector(
+    this::Multigroup_Cross_Sections,
+    values::Vector{Float64},
+    label::AbstractString;
+    allow_cutoff::Bool=false,
+)
+    expected = allow_cutoff ? (this.number_of_groups,this.number_of_groups+1) :
+                              (this.number_of_groups,)
+    length(values) in expected || error(
+        "The $(label) vector length does not match the number of groups.",
+    )
+    all(isfinite,values) || error("The $(label) vector contains non-finite values.")
+    return values
+end
 
-To set the total cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `total::Vector{Float64}` : total cross-sections.
-
-# Output Argument(s)
-N/A
-
-"""
 function set_total(this::Multigroup_Cross_Sections,total::Vector{Float64})
-    if length(total) != this.number_of_groups error("The length of the total cross-sections don't fit the number of groups.") end
-    this.total = total
+    this.total = copy(_validate_group_vector(this,total,"total cross section"))
 end
 
-"""
-    set_absorption(this::Multigroup_Cross_Sections,absorption::Vector{Float64})
-
-To set the absorption cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `absorption::Vector{Float64}` : absorption cross-sections.
-
-# Output Argument(s)
-N/A
-
-"""
 function set_absorption(this::Multigroup_Cross_Sections,absorption::Vector{Float64})
-    if length(absorption) != this.number_of_groups error("The length of the absorption cross-sections don't fit the number of groups.") end
-    this.absorption = absorption
+    this.absorption = copy(_validate_group_vector(this,absorption,"absorption cross section"))
 end
 
-"""
-    set_boundary_stopping_powers(this::Multigroup_Cross_Sections,stopping_powers::Vector{Float64})
-
-To set the stopping powers at group boundaries.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `boundary_stopping_powers::Vector{Float64}` : stopping powers at group boundaries.
-
-# Output Argument(s)
-N/A
-
-"""
-function set_boundary_stopping_powers(this::Multigroup_Cross_Sections,boundary_stopping_powers::Vector{Float64})
-    if length(boundary_stopping_powers) != this.number_of_groups + 1 error("The length of the boundary_stopping_powers don't fit the number of groups.") end
-    this.boundary_stopping_powers = boundary_stopping_powers
+function set_boundary_stopping_powers(
+    this::Multigroup_Cross_Sections,
+    boundary_stopping_powers::Vector{Float64},
+)
+    length(boundary_stopping_powers) == this.number_of_groups+1 || error(
+        "Boundary stopping powers require number_of_groups+1 values.",
+    )
+    all(isfinite,boundary_stopping_powers) || error(
+        "Boundary stopping powers contain non-finite values.",
+    )
+    this.boundary_stopping_powers = copy(boundary_stopping_powers)
 end
 
-"""
-    set_stopping_powers(this::Multigroup_Cross_Sections,stopping_powers::Vector{Float64})
-
-To set the stopping powers.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `stopping_powers::Vector{Float64}` : stopping powers.
-
-# Output Argument(s)
-N/A
-
-"""
 function set_stopping_powers(this::Multigroup_Cross_Sections,stopping_powers::Vector{Float64})
-    if length(stopping_powers) != this.number_of_groups error("The length of the stopping_powers don't fit the number of groups.") end
-    this.stopping_powers = stopping_powers
+    this.stopping_powers = copy(
+        _validate_group_vector(this,stopping_powers,"stopping power"),
+    )
+end
+
+function set_momentum_transfer(
+    this::Multigroup_Cross_Sections,
+    momentum_transfer::Vector{Float64},
+)
+    this.momentum_transfer = copy(
+        _validate_group_vector(this,momentum_transfer,"momentum transfer"),
+    )
+end
+
+function set_energy_deposition(
+    this::Multigroup_Cross_Sections,
+    energy_deposition::Vector{Float64},
+)
+    length(energy_deposition) == this.number_of_groups+1 || error(
+        "Energy deposition requires number_of_groups+1 values.",
+    )
+    all(isfinite,energy_deposition) || error(
+        "Energy-deposition coefficients contain non-finite values.",
+    )
+    this.energy_deposition = copy(energy_deposition)
+end
+
+function set_charge_deposition(
+    this::Multigroup_Cross_Sections,
+    charge_deposition::Vector{Float64},
+)
+    length(charge_deposition) == this.number_of_groups+1 || error(
+        "Charge deposition requires number_of_groups+1 values.",
+    )
+    all(isfinite,charge_deposition) || error(
+        "Charge-deposition coefficients contain non-finite values.",
+    )
+    this.charge_deposition = copy(charge_deposition)
+end
+
+function set_scattering(
+    this::Multigroup_Cross_Sections,
+    scattering::Array{Float64,3},
+)
+    size(scattering,1) == this.number_of_groups || error(
+        "Scattering incoming-group dimension is inconsistent.",
+    )
+    all(isfinite,scattering) || error("Scattering data contain non-finite values.")
+    push!(this.scattering,copy(scattering))
 end
 
 """
-    set_momentum_transfer(this::Multigroup_Cross_Sections,momentum_transfer::Vector{Float64})
+    add_response_channel!(this, key, values; accumulate=true)
 
-To set the momentum transfers.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `momentum_transfer::Vector{Float64}` : momentum transfers.
-
-# Output Argument(s)
-N/A
-
+Store one generic response vector. Values may contain one coefficient per energy group or one
+additional cutoff coefficient. Repeated kernel contributions accumulate by default; shape mismatch
+is rejected rather than padded or truncated.
 """
-function set_momentum_transfer(this::Multigroup_Cross_Sections,momentum_transfer::Vector{Float64})
-    if length(momentum_transfer) != this.number_of_groups error("The length of the momentum_transfer don't fit the number of groups.") end
-    this.momentum_transfer = momentum_transfer
+function add_response_channel!(
+    this::Multigroup_Cross_Sections,
+    key::AbstractString,
+    values::AbstractVector{<:Real};
+    accumulate::Bool=true,
+)
+    key_string = String(key)
+    isempty(key_string) && error("Response-channel key cannot be empty.")
+    occursin("|",key_string) || error(
+        "Response-channel key must use quantity|process schema.",
+    )
+    vector = Float64.(values)
+    length(vector) in (this.number_of_groups,this.number_of_groups+1) || error(
+        "Response-channel length must be number_of_groups or number_of_groups+1.",
+    )
+    all(isfinite,vector) || error("Response-channel coefficients must be finite.")
+    if haskey(this.response_channels,key_string)
+        accumulate || error("Response channel already exists: $(key_string).")
+        length(this.response_channels[key_string]) == length(vector) || error(
+            "Cannot accumulate response channels with different group dimensions.",
+        )
+        this.response_channels[key_string] .+= vector
+    else
+        this.response_channels[key_string] = copy(vector)
+    end
+    return this
 end
 
-"""
-    set_energy_deposition(this::Multigroup_Cross_Sections,
-    energy_deposition::Vector{Float64})
-
-To set the energy deposition cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `energy_deposition::Vector{Float64}` : energy deposition cross-sections.
-
-# Output Argument(s)
-N/A
-
-"""
-function set_energy_deposition(this::Multigroup_Cross_Sections,energy_deposition::Vector{Float64})
-    if length(energy_deposition) != this.number_of_groups + 1 error("The length of the energy_deposition cross-sections don't fit the number of groups.") end
-    this.energy_deposition = energy_deposition
+function set_response_channel!(
+    this::Multigroup_Cross_Sections,
+    key::AbstractString,
+    values::AbstractVector{<:Real},
+)
+    key_string = String(key)
+    haskey(this.response_channels,key_string) && delete!(this.response_channels,key_string)
+    return add_response_channel!(this,key_string,values;accumulate=false)
 end
 
-"""
-    set_charge_deposition(this::Multigroup_Cross_Sections,
-    charge_deposition::Vector{Float64})
+has_response_channel(this::Multigroup_Cross_Sections,key::AbstractString) =
+    haskey(this.response_channels,String(key))
 
-To set the charge deposition cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `charge_deposition::Vector{Float64}` : charge deposition cross-sections.
-
-# Output Argument(s)
-N/A
-
-"""
-function set_charge_deposition(this::Multigroup_Cross_Sections,charge_deposition::Vector{Float64})
-    if length(charge_deposition) != this.number_of_groups + 1 error("The length of the charge_deposition cross-sections don't fit the number of groups.") end
-    this.charge_deposition = charge_deposition
+function get_response_channel(this::Multigroup_Cross_Sections,key::AbstractString)
+    key_string = String(key)
+    haskey(this.response_channels,key_string) || error(
+        "Multigroup response channel is unavailable: $(key_string).",
+    )
+    return copy(this.response_channels[key_string])
 end
 
-"""
-    set_scattering(this::Multigroup_Cross_Sections,scattering::Array{Float64,3})
-
-To set the scattering cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `scattering::Array{Float64,3}` : scattering cross-sections.
-
-# Output Argument(s)
-N/A
-
-"""
-function set_scattering(this::Multigroup_Cross_Sections,scattering::Array{Float64,3})
-    push!(this.scattering,scattering)
+function get_response_channel_keys(
+    this::Multigroup_Cross_Sections;
+    quantity::Union{Nothing,AbstractString}=nothing,
+)
+    keys_all = sort(collect(keys(this.response_channels)))
+    isnothing(quantity) && return keys_all
+    prefix = string(quantity,"|")
+    return [key for key in keys_all if startswith(key,prefix)]
 end
 
-"""
-    get_total(this::Multigroup_Cross_Sections)
+function get_response_channels(this::Multigroup_Cross_Sections)
+    return Dict(key => copy(value) for (key,value) in this.response_channels)
+end
 
-Get the total cross-sections.
+function sum_response_channels(
+    this::Multigroup_Cross_Sections,
+    quantity::AbstractString,
+)
+    keys_selected = get_response_channel_keys(this;quantity=quantity)
+    isempty(keys_selected) && error("No response channels exist for quantity $(quantity).")
+    lengths = unique(length(this.response_channels[key]) for key in keys_selected)
+    length(lengths) == 1 || error("Response channels have inconsistent group dimensions.")
+    total = zeros(Float64,first(lengths))
+    for key in keys_selected
+        total .+= this.response_channels[key]
+    end
+    return total
+end
 
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-
-# Output Argument(s)
-- `total::Vector{Float64}` : total cross-sections.
-
-"""
 function get_total(this::Multigroup_Cross_Sections)
-    if ismissing(this.total) error("Unable to get multigroup total cross-sections. Missing data.") end
+    ismissing(this.total) && error("Unable to get multigroup total cross sections. Missing data.")
     return this.total
 end
 
-"""
-    get_absorption(this::Multigroup_Cross_Sections)
-
-Get the absorption cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-
-# Output Argument(s)
-- `absorption::Vector{Float64}` : absorption cross-sections.
-
-"""
 function get_absorption(this::Multigroup_Cross_Sections)
-    if ismissing(this.absorption) error("Unable to get multigroup absorption cross-sections. Missing data.") end
+    ismissing(this.absorption) && error(
+        "Unable to get multigroup absorption cross sections. Missing data.",
+    )
     return this.absorption
 end
 
-"""
-    get_scattering(this::Multigroup_Cross_Sections,index_particle_out::Int64)
-
-Get the scattering cross-sections, for a given outgoing particle.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-- `index_particle_out::Int64` : index of the outgoing particle.
-
-# Output Argument(s)
-- `scattering::Array{Float64}` : scattering cross-sections for a given outgoing particle.
-
-"""
 function get_scattering(this::Multigroup_Cross_Sections,index_particle_out::Int64)
+    1 ≤ index_particle_out ≤ length(this.scattering) || error(
+        "Outgoing-particle scattering index is out of range.",
+    )
     return this.scattering[index_particle_out]
 end
 
-"""
-    get_boundary_stopping_powers(this::Multigroup_Cross_Sections)
-
-Get the stopping powers at group boundaries.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-
-# Output Argument(s)
-- `boundary_stopping_powers::Vector{Float64}` : stopping powers at group boundaries.
-
-"""
 function get_boundary_stopping_powers(this::Multigroup_Cross_Sections)
+    ismissing(this.boundary_stopping_powers) && error("Boundary stopping powers are missing.")
     return this.boundary_stopping_powers
 end
 
-"""
-    get_stopping_powers(this::Multigroup_Cross_Sections)
-
-Get the stopping powers.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-
-# Output Argument(s)
-- `stopping_powers::Vector{Float64}` : stopping powers.
-
-"""
 function get_stopping_powers(this::Multigroup_Cross_Sections)
+    ismissing(this.stopping_powers) && error("Stopping powers are missing.")
     return this.stopping_powers
 end
 
-"""
-    get_momentum_transfer(this::Multigroup_Cross_Sections)
-
-Get the momentum transfers.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-
-# Output Argument(s)
-- `momentum_transfer::Vector{Float64}` : momentum transfers.
-
-"""
 function get_momentum_transfer(this::Multigroup_Cross_Sections)
+    ismissing(this.momentum_transfer) && error("Momentum-transfer data are missing.")
     return this.momentum_transfer
 end
 
-"""
-    get_energy_deposition(this::Multigroup_Cross_Sections)
-
-Get the energy deposition cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-
-# Output Argument(s)
-- `energy_deposition::Vector{Float64}` : energy deposition cross-sections.
-
-"""
 function get_energy_deposition(this::Multigroup_Cross_Sections)
+    ismissing(this.energy_deposition) && error("Energy-deposition data are missing.")
     return this.energy_deposition
 end
 
-"""
-    get_charge_deposition(this::Multigroup_Cross_Sections)
-
-Get the charge deposition cross-sections.
-
-# Input Argument(s)
-- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
-
-# Output Argument(s)
-- `charge_deposition::Vector{Float64}` : charge deposition cross-sections.
-
-"""
 function get_charge_deposition(this::Multigroup_Cross_Sections)
+    ismissing(this.charge_deposition) && error("Charge-deposition data are missing.")
     return this.charge_deposition
 end
