@@ -72,8 +72,10 @@ function _canonical_matrix(
     else
         error("Unsupported HDF5 storage order $(storage_order).")
     end
-    size(canonical) == (rows,columns) || error(
-        "HDF5 matrix $(label) resolves to shape $(size(canonical)); expected $(rows,columns).",
+    expected = (rows,columns)
+    size(canonical) == expected || error(
+        "HDF5 matrix $(label) resolves to shape " * string(size(canonical)) *
+        "; expected " * string(expected) * ".",
     )
     return Array{T,2}(canonical)
 end
@@ -98,7 +100,8 @@ function _canonical_tensor3(
     end
     expected = (first_dimension,second_dimension,third_dimension)
     size(canonical) == expected || error(
-        "HDF5 tensor $(label) resolves to shape $(size(canonical)); expected $(expected).",
+        "HDF5 tensor $(label) resolves to shape " * string(size(canonical)) *
+        "; expected " * string(expected) * ".",
     )
     return Array{T,3}(canonical)
 end
