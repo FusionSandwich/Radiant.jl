@@ -1,0 +1,6 @@
+# Verification-only schema template. Use independent equilibrated trajectories.
+temperature_K,replica,kxx_W_m_K,kyy_W_m_K,kzz_W_m_K
+20.0,seed-001,1.0,1.0,0.5
+20.0,seed-002,1.1,0.9,0.55
+77.0,seed-001,2.0,1.8,0.8
+77.0,seed-002,2.1,1.9,0.85
