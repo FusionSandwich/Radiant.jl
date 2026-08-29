@@ -1,0 +1,7 @@
+# Verification-only complete-energy schema example. Replace with evaluated Gd-155/Gd-157 data.
+target_nuclide,residual_nuclide,branch_id,branch_probability,q_value_eV,species,energy_eV,yield_per_branch,delay_s,correlation_id,transition_id,recoil_energy_eV
+Gd-157,Gd-158,fixture-branch,1.0,8000100.0,gamma,6000000.0,1.0,0.0,cascade-1,gamma-primary,100.0
+Gd-157,Gd-158,fixture-branch,1.0,8000100.0,gamma,1800000.0,1.0,0.0,cascade-1,gamma-secondary,100.0
+Gd-157,Gd-158,fixture-branch,1.0,8000100.0,conversion_electron,150000.0,1.0,0.0,cascade-1,conversion-electron,100.0
+Gd-157,Gd-158,fixture-branch,1.0,8000100.0,auger_electron,20000.0,1.0,0.0,cascade-1,auger-electron,100.0
+Gd-157,Gd-158,fixture-branch,1.0,8000100.0,xray,30000.0,1.0,0.0,cascade-1,characteristic-xray,100.0
