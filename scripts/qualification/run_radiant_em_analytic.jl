@@ -3,6 +3,7 @@
 using Radiant
 using TOML
 using Dates
+using LinearAlgebra
 
 const ROOT = normpath(joinpath(@__DIR__,"..",".."))
 const OUTPUT = joinpath(

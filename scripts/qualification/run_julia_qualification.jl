@@ -18,7 +18,8 @@ end
 
 function git_value(arguments...)
     try
-        return readchomp(`git -C $ROOT $(arguments...)`)
+        command = Cmd(vcat(["git","-C",ROOT],String[string(value) for value in arguments]))
+        return readchomp(command)
     catch
         return "unavailable"
     end

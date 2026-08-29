@@ -10,13 +10,23 @@ length(ARGS) == 2 || error(
 fixture_directory = abspath(ARGS[1])
 receipt_path = abspath(ARGS[2])
 
+function file_sha256(path::AbstractString)
+    return open(path,"r") do io
+        bytes2hex(SHA.sha256(io))
+    end
+end
+
 boundary_path = joinpath(fixture_directory,"python_boundary_source.h5")
 volume_path = joinpath(fixture_directory,"python_volume_source.h5")
 
-boundary_hash = source_artifact_sha256(boundary_path)
-volume_hash = source_artifact_sha256(volume_path)
-boundary = read_boundary_source_hdf5(boundary_path;expected_sha256=boundary_hash)
-volume = read_volume_source_hdf5(volume_path;expected_sha256=volume_hash)
+boundary_hash = file_sha256(boundary_path)
+volume_hash = file_sha256(volume_path)
+boundary = read_boundary_angular_current_hdf5(
+    boundary_path,Photon();expected_file_sha256=boundary_hash,
+)
+volume = read_anisotropic_volume_source_hdf5(
+    volume_path,Photon();expected_file_sha256=volume_hash,
+)
 
 boundary_current = get_incoming_current(boundary)
 size(boundary_current) == (1,2) || error("Unexpected boundary-current shape.")
@@ -43,9 +53,10 @@ isapprox(volume_rate[2],10.0;rtol=1.0e-12,atol=1.0e-12) || error(
 )
 
 receipt = Dict{String,Any}(
-    "schema" => "radiant.cross_language_source_replay/v1",
+    "schema" => "radiant.cross_language_source_replay/v2",
     "status" => "PASS",
     "julia_version" => string(VERSION),
+    "storage_order" => "external-row-major",
     "boundary" => Dict{String,Any}(
         "path" => boundary_path,
         "sha256" => boundary_hash,
@@ -69,6 +80,6 @@ receipt = Dict{String,Any}(
 )
 mkpath(dirname(receipt_path))
 open(receipt_path,"w") do io
-    TOML.print(io,receipt;sorted=true)
+    TOML.print(io,receipt)
 end
 println("Cross-language source replay PASS: $(receipt_path)")
