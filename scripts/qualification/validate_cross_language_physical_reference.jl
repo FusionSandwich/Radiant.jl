@@ -42,21 +42,17 @@ compton.values ≈ expected_compton || error(
 compton.standard_uncertainty ≈ expected_compton_uncertainty || error(
     "Python-to-Julia Compton uncertainty ordering changed.",
 )
-all(response.classification == :synthetic for response in values(bundle.responses)) || error(
+all(response.classification == :synthetic for response in Base.values(bundle.responses)) || error(
     "Cross-language fixture must remain classified as synthetic.",
 )
 all(response.source_artifact_hash == repeat("1",64)
-    for response in values(bundle.responses)) || error(
+    for response in Base.values(bundle.responses)) || error(
     "Source lineage was not preserved by the Python producer.",
 )
 
-reference_by_process = references_by_process_key(bundle)
-score_channels = Dict(
-    "photoelectric" => reshape(expected_photoelectric,2,2,1),
-    "compton" => reshape(expected_compton,2,2,1),
-)
-# The fixture reference arrays are two-dimensional; reshape them consistently for a score object.
-for (key,response) in reference_by_process
+raw_reference_by_process = references_by_process_key(bundle)
+reference_by_process = Dict{String,Physical_Reference_Response}()
+for (key,response) in raw_reference_by_process
     reference_by_process[key] = Physical_Reference_Response(
         response_id=response.response_id,
         process_key=response.process_key,
@@ -74,6 +70,11 @@ for (key,response) in reference_by_process
         metadata=response.metadata,
     )
 end
+
+score_channels = Dict(
+    "photoelectric" => reshape(expected_photoelectric,2,2,1),
+    "compton" => reshape(expected_compton,2,2,1),
+)
 score_total = score_channels["photoelectric"]+score_channels["compton"]
 score = Process_Resolved_Score(
     "photon","energy-deposition",score_channels,score_total;
