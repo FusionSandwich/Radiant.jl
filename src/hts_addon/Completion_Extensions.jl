@@ -11,6 +11,7 @@ include(joinpath(@__DIR__,"Physical_Reference_Artifact.jl"))
 include(joinpath(@__DIR__,"Layer_Heating_Ledger.jl"))
 include(joinpath(@__DIR__,"Gd_Self_Shielding_Analytic.jl"))
 include(joinpath(@__DIR__,"Response_Preserving_Group_Condensation.jl"))
+include(joinpath(@__DIR__,"Activation_Delayed_Source.jl"))
 
 export Evaluated_Gd_Cascade_Dataset,read_evaluated_gd_cascade_csv
 export evaluated_gd_dataset_is_production_ready,gd_dataset_receipt
@@ -38,3 +39,8 @@ export Response_Condensation_Receipt,condense_response_coefficients
 export condense_response_covariance,group_condensation_map_hash
 export Transfer_Matrix_Condensation_Receipt,condense_transfer_matrix
 export response_condensation_receipt,transfer_matrix_condensation_receipt
+
+export Delayed_Emission_Bin,Delayed_Decay_Scheme,Delayed_Activity_Field
+export Delayed_NonEM_Handoff,Activation_Delayed_Source_Bundle
+export build_activation_delayed_source_bundle,activation_delayed_bundle_is_production_ready
+export activation_delayed_source_receipt,synthetic_activation_decay_fixture
