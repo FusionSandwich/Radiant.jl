@@ -76,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v9",
+        "schema" => "radiant.julia_qualification/v10",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -108,6 +108,7 @@ function main()
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
             "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
             "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS" => false,
+            "MATERIAL_DATA_BINDINGS_SOFTWARE_PASS" => false,
             "PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS" => false,
             "CLOSED_COUPLING_SOFTWARE_PASS" => false,
             "RADIANT_EM_ANALYTIC_PASS" => false,
@@ -153,6 +154,7 @@ function main()
         ("hts_curvature_convergence_tests","hts_curvature_convergence_tests.jl"),
         ("hts_gd_evaluated_tests","hts_gd_evaluated_tests.jl"),
         ("hts_response_table_completion_tests","hts_response_table_completion_tests.jl"),
+        ("hts_material_data_bindings_tests","hts_material_data_bindings_tests.jl"),
         ("hts_physical_reference_bundle_tests","hts_physical_reference_bundle_tests.jl"),
         ("hts_neutronics_heating_tests","hts_neutronics_heating_tests.jl"),
         ("hts_group_condensation_tests","hts_group_condensation_tests.jl"),
@@ -169,7 +171,7 @@ function main()
         "EVALUATED_GD_ADAPTER_SOFTWARE_PASS","GDBCO_SELF_SHIELDING_ANALYTIC_PASS",
         "HTS_HEATING_LEDGER_SOFTWARE_PASS","RESPONSE_PRESERVING_GROUP_CONDENSATION_PASS",
         "MATERIAL_RESPONSE_REGISTRY_PASS","ATOMISTIC_RESPONSE_PIPELINE_PASS",
-        "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS",
+        "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS","MATERIAL_DATA_BINDINGS_SOFTWARE_PASS",
         "PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
     )
         receipt["gates"][gate] = true
