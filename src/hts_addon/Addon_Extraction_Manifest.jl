@@ -116,6 +116,7 @@ function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
         "all-hts-source-files-have-extraction-owners",
         "response-specific-group-condensation-preserved",
         "activation-source-energy-separated-from-deposited-heat",
+        "protected-response-uncertainty-and-multi-axis-convergence-preserved",
     )
     for invariant in required_invariants
         invariant in this.extraction_invariants || error(
@@ -183,6 +184,13 @@ function default_hts_addon_extraction_manifest()
             core_dependencies=["SHA","multigroup energy/source conventions"],
             status=:ready_to_extract,
             notes="Creates separate spectrum-weighted condensation receipts for heating, Gd capture, activation, PKA, and neutron-to-photon transfer responses.",
+        ),
+        HTS_Addon_Component(
+            :response_uncertainty_and_convergence,
+            ["src/hts_addon/Response_Uncertainty_And_Convergence.jl"];
+            core_dependencies=["protected response results","physical reference contract"],
+            status=:ready_to_extract,
+            notes="Combines correlated and independent uncertainty sources and requires independent source, mesh, angle, energy, field, facet, material, coupling, and time convergence where requested.",
         ),
         HTS_Addon_Component(
             :spatial_field_maps,
@@ -314,6 +322,7 @@ function default_hts_addon_extraction_manifest()
             "all-hts-source-files-have-extraction-owners",
             "response-specific-group-condensation-preserved",
             "activation-source-energy-separated-from-deposited-heat",
+            "protected-response-uncertainty-and-multi-axis-convergence-preserved",
         ],
         metadata=Dict(
             "hosting_policy" => "temporary-core-only",
@@ -325,6 +334,7 @@ function default_hts_addon_extraction_manifest()
             "heating_ownership" => "one-additive-owner-per-population-response",
             "group_condensation" => "response-and-reference-spectrum-specific",
             "activation_delayed_sources" => "parent-resolved-and-energy-ledger-separated",
+            "uncertainty_and_convergence" => "response-specific-and-multi-axis",
         ),
     )
     validate_addon_extraction_manifest(manifest)
