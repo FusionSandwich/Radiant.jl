@@ -44,7 +44,7 @@ struct HTS_Addon_Extraction_Manifest
 
     function HTS_Addon_Extraction_Manifest(
         components::AbstractVector{HTS_Addon_Component};
-        schema::AbstractString="radiant.hts_addon_extraction/v2",
+        schema::AbstractString="radiant.hts_addon_extraction/v3",
         temporary_host_repository::AbstractString="FusionSandwich/Radiant.jl",
         intended_package::AbstractString="RadiantHTS.jl",
         generic_core_touchpoints::AbstractVector{<:AbstractString}=String[],
@@ -79,11 +79,34 @@ struct HTS_Addon_Extraction_Manifest
     end
 end
 
+function _manifest_owned_files(this::HTS_Addon_Extraction_Manifest)
+    return sort(unique(String[
+        path for component in this.components for path in component.files
+    ]))
+end
+
+function _present_hts_addon_julia_files()
+    return sort(String[
+        joinpath("src","hts_addon",name)
+        for name in readdir(@__DIR__)
+        if endswith(name,".jl")
+    ])
+end
+
+"""
+Validate both policy invariants and extraction completeness. Every Julia source file currently
+stored under `src/hts_addon` must have exactly one component owner, including the temporary loader
+and manifest itself. This prevents implemented capabilities from becoming untested orphan files.
+"""
 function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
     for component in this.components
         for path in component.files
             startswith(path,"src/hts_addon/") || error(
                 "HTS-specific implementation must remain under src/hts_addon/: $(path).",
+            )
+            local_path = normpath(joinpath(@__DIR__,"..","..",path))
+            isfile(local_path) || error(
+                "Extraction manifest references a missing HTS source file: $(path).",
             )
         end
     end
@@ -94,12 +117,20 @@ function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
         "source-and-result-provenance-preserved",
         "synthetic-evidence-cannot-pass-physical-gates",
         "future-addon-extraction-preserved",
+        "comparison-responses-excluded-from-production-sums",
+        "all-hts-source-files-have-extraction-owners",
     )
     for invariant in required_invariants
         invariant in this.extraction_invariants || error(
             "Extraction manifest is missing invariant $(invariant).",
         )
     end
+    owned = _manifest_owned_files(this)
+    present = _present_hts_addon_julia_files()
+    owned == present || error(
+        "HTS add-on extraction manifest is incomplete. Missing owners=" *
+        string(setdiff(present,owned))*"; stale entries="*string(setdiff(owned,present))*".",
+    )
     return true
 end
 
@@ -115,12 +146,30 @@ end
 function default_hts_addon_extraction_manifest()
     components = HTS_Addon_Component[
         HTS_Addon_Component(
+            :addon_infrastructure,
+            [
+                "src/hts_addon/Addon_Extraction_Manifest.jl",
+                "src/hts_addon/CSV_Utilities.jl",
+                "src/hts_addon/Completion_Extensions.jl",
+            ];
+            core_dependencies=["Radiant module include/export wiring"],
+            status=:temporary_core,
+            notes="The loader becomes RadiantHTS.jl package wiring; CSV utilities remain private add-on helpers.",
+        ),
+        HTS_Addon_Component(
             :process_resolved_scoring,
             ["src/hts_addon/Process_Resolved_Scoring.jl"];
             core_dependencies=[
                 "Multigroup_Cross_Sections response-channel hook","Cross_Sections",
                 "Geometry","Flux",
             ],status=:temporary_core,
+        ),
+        HTS_Addon_Component(
+            :layer_heating_ownership,
+            ["src/hts_addon/Layer_Heating_Ledger.jl"];
+            core_dependencies=["Process_Resolved_Scoring","Source_Normalization"],
+            status=:ready_to_extract,
+            notes="Separates deposition, heat, storage, escape, recoil/cutoff handoff, prompt/delayed populations, and comparison-only responses.",
         ),
         HTS_Addon_Component(
             :spatial_field_maps,
@@ -135,26 +184,42 @@ function default_hts_addon_extraction_manifest()
             ],status=:temporary_core,
         ),
         HTS_Addon_Component(
-            :piecewise_flat_atlas,
-            ["src/hts_addon/Piecewise_Flat_Tape_Atlas.jl"];
-            core_dependencies=["Spatial_Magnetic_Field_Map"],status=:ready_to_extract,
+            :piecewise_flat_atlas_and_curvature,
+            [
+                "src/hts_addon/Piecewise_Flat_Tape_Atlas.jl",
+                "src/hts_addon/Analytic_Curvature_Benchmark.jl",
+                "src/hts_addon/Curvature_Convergence_Study.jl",
+            ];
+            core_dependencies=["Spatial_Magnetic_Field_Map","Physical reference contract"],
+            status=:ready_to_extract,
         ),
         HTS_Addon_Component(
             :faceted_geometry,
-            ["src/hts_addon/Faceted_Geometry.jl"];
-            core_dependencies=["HDF5 interchange helpers","Geometry"],
+            [
+                "src/hts_addon/Faceted_Geometry.jl",
+                "src/hts_addon/Faceted_Local_Tape_Domain.jl",
+            ];
+            core_dependencies=[
+                "HDF5 interchange helpers","Geometry","Tape_Stack_Definition",
+                "Boundary_Angular_Current_Source",
+            ],
             status=:ready_to_extract,
-            notes="DAGMC/ParaStell facets are validated and localized/voxelized; direct unstructured SN transport is not claimed.",
+            notes="DAGMC/ParaStell facets are validated and converted to conservative local Cartesian domains; direct unstructured SN transport is not claimed.",
         ),
         HTS_Addon_Component(
-            :gd_capture_cascade,
+            :gd_capture_and_self_shielding,
             [
                 "src/hts_addon/Gd_Prompt_Capture_Cascade.jl",
                 "src/hts_addon/Gd_Cascade_Data_Adapter.jl",
+                "src/hts_addon/Gd_Evaluated_Cascade_Adapter.jl",
+                "src/hts_addon/Gd_Self_Shielding_Analytic.jl",
             ];
             core_dependencies=[
                 "Anisotropic_Volume_Source","Source_Normalization","Particle",
-            ],status=:ready_to_extract,
+                "Capture_Rate_Field",
+            ],
+            status=:ready_to_extract,
+            notes="Groupwise slab self-shielding is a screening/reference fixture; physical production remains owned by OpenMC/OpenSn evaluated-data transport.",
         ),
         HTS_Addon_Component(
             :subkev_thermalization,
@@ -174,8 +239,12 @@ function default_hts_addon_extraction_manifest()
         ),
         HTS_Addon_Component(
             :material_response_registry,
-            ["src/hts_addon/Material_Response_Registry.jl"];
-            core_dependencies=["Cryogenic_Electrothermal"],status=:ready_to_extract,
+            [
+                "src/hts_addon/Material_Response_Registry.jl",
+                "src/hts_addon/Response_Table_Completion.jl",
+            ];
+            core_dependencies=["Cryogenic_Electrothermal","Atomistic response tables"],
+            status=:ready_to_extract,
         ),
         HTS_Addon_Component(
             :atomistic_response_tables,
@@ -185,14 +254,19 @@ function default_hts_addon_extraction_manifest()
         ),
         HTS_Addon_Component(
             :physical_reference_qualification,
-            ["src/hts_addon/Physical_Reference_Qualification.jl"];
-            core_dependencies=["Process_Resolved_Scoring"],status=:ready_to_extract,
+            [
+                "src/hts_addon/Physical_Reference_Artifact.jl",
+                "src/hts_addon/Physical_Reference_Qualification.jl",
+            ];
+            core_dependencies=["Process_Resolved_Scoring","HDF5"],
+            status=:ready_to_extract,
         ),
         HTS_Addon_Component(
             :closed_opensn_radiant_coupling,
             ["src/hts_addon/OpenSn_Radiant_Closed_Coupling.jl"];
             core_dependencies=[
                 "Boundary_Angular_Current_Source","Transport_Ownership_Map",
+                "outgoing SN boundary angular flux",
             ],status=:ready_to_extract,
         ),
     ]
@@ -203,8 +277,10 @@ function default_hts_addon_extraction_manifest()
             "src/structures/Multigroup_Cross_Sections.jl generic response channels",
             "src/cross_sections/generate_cross_sections.jl response-channel population",
             "src/structures/Electromagnetic_Field.jl generic cell-centred field storage",
+            "src/structures/Flux_Per_Particle.jl generic outgoing-boundary storage",
             "src/particle_transport/sn_flux.jl generic cell-local field operator",
             "src/particle_transport/sn_inner_pass.jl generic cell-local operator application",
+            "src/particle_transport/sn_boundary_flux.jl generic outgoing-current reconstruction",
             "src/interchange/source_hdf5.jl generic source interchange",
             "Project.toml standard-library dependencies",
             "scripts/geometry/export_dagmc_facets.py external adapter",
@@ -219,6 +295,8 @@ function default_hts_addon_extraction_manifest()
             "mean-transport-and-event-sampling-distinguished",
             "synthetic-evidence-cannot-pass-physical-gates",
             "future-addon-extraction-preserved",
+            "comparison-responses-excluded-from-production-sums",
+            "all-hts-source-files-have-extraction-owners",
         ],
         metadata=Dict(
             "hosting_policy" => "temporary-core-only",
@@ -226,6 +304,8 @@ function default_hts_addon_extraction_manifest()
             "branch_policy" => "branch-only-no-pr",
             "direct_faceted_transport" => "not-claimed",
             "spatial_field_transport" => "cell-local-within-one-sn-sweep",
+            "gd_self_shielding_transport" => "analytic-screening-only",
+            "heating_ownership" => "one-additive-owner-per-population-response",
         ),
     )
     validate_addon_extraction_manifest(manifest)
