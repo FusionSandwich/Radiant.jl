@@ -55,6 +55,8 @@ jobs:
         run: julia --startup-file=no --project=. test/hts_neutronics_heating_tests.jl
       - name: Run response-preserving group condensation tests
         run: julia --startup-file=no --project=. test/hts_group_condensation_tests.jl
+      - name: Run activation delayed-source tests
+        run: julia --startup-file=no --project=. test/hts_activation_delayed_source_tests.jl
       - name: Run HTS material response-table tests
         run: julia --startup-file=no --project=. test/hts_response_table_completion_tests.jl
       - name: Run atomistic-to-material data-binding tests
@@ -67,7 +69,7 @@ jobs:
         run: |
           mkdir -p artifacts/hts-addon
           {
-            echo 'schema = "radiant.hts_addon_test_receipt/v10"'
+            echo 'schema = "radiant.hts_addon_test_receipt/v11"'
             echo 'branch_policy = "branch-only-no-pr"'
             echo 'future_package = "RadiantHTS.jl"'
             echo 'julia_version = "${{ matrix.julia-version }}"'
@@ -82,6 +84,7 @@ jobs:
             echo 'gdbco_self_shielding_screen_tested = true'
             echo 'heating_ownership_ledger_tested = true'
             echo 'response_preserving_group_condensation_tested = true'
+            echo 'activation_delayed_sources_tested = true'
             echo 'material_registry_tested = true'
             echo 'atomistic_table_pipeline_tested = true'
             echo 'material_response_completion_tested = true'
@@ -90,6 +93,7 @@ jobs:
             echo 'closed_coupling_algorithm_tested = true'
             echo 'physical_openmc_replay_pass = false'
             echo 'physical_opensn_replay_pass = false'
+            echo 'physical_activation_replay_pass = false'
             echo 'physical_curved_transport_pass = false'
             echo 'evaluated_gd_physical_data_pass = false'
             echo 'ybco_gdbco_material_data_physical_pass = false'
