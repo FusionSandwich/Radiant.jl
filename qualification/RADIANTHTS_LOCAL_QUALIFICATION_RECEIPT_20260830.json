@@ -1,0 +1,76 @@
+{
+  "schema": "radianthts_local_qualification_receipt/v1",
+  "status": "PASS_SOFTWARE_AND_ANALYTIC_ONLY",
+  "branch": "codex/radianthts-local-physical-completion-20260830",
+  "locked_base_sha": "4168159a33162234b66d23cbb694cad22dc89c8a",
+  "qualified_source_sha": "1ae21438c32f9fb52456daeee0a846bfa9afbc65",
+  "execution_policy": {
+    "cpu_threads": 2,
+    "network_used_during_qualification": true,
+    "large_results_committed": false,
+    "absolute_host_paths_committed": false
+  },
+  "julia_matrix": [
+    {
+      "julia_version": "1.10.12",
+      "overall_status": "PASS",
+      "qualification_receipt_sha256": "3c49f271e9419c73fab3f05f5220df04be47dca9b95aaa8f37dfb93b9274d08e",
+      "qualification_log_sha256": "95d04c4312d74c217f5d6e83fbd4eb92f578dabae83a91920fb1dec588374317"
+    },
+    {
+      "julia_version": "1.6.7",
+      "overall_status": "PASS",
+      "qualification_receipt_sha256": "8299537d66ed2d7a078693211290cf438e4599b88cace5ad8a4546186aa324a6",
+      "qualification_log_sha256": "b45b08669dbf27deb6445504d0b4f4a4bb1e8f6895ad7be53fa970d6912969f5",
+      "registry_fallback": {
+        "method": "static_shallow_cli_clone",
+        "general_registry_sha": "5130cd6269517528ef93ee47870e1ca5ab38191d"
+      }
+    }
+  ],
+  "executed_suites": [
+    "Pkg.instantiate",
+    "Pkg.precompile",
+    "Pkg.test (58 core tests)",
+    "HTS focused test suites",
+    "HDF5 fixture tests (25 tests)",
+    "Radiant EM analytic qualification",
+    "HTS heating-chain analytic qualification",
+    "GdBCO capture-source analytic qualification",
+    "OpenSn-Radiant fixture interface qualification"
+  ],
+  "cross_language_evidence": {
+    "source_replay_receipt_sha256": "c9f767a81809e6702e3a6be3ed1d911c78be56d037b4cb7dff733512399e0908",
+    "synthetic_physical_reference_hdf5_sha256": "37e188ce30280114c62a6a9b95727f7e09d20f5df5120a50f68949fe2e2fe209",
+    "synthetic_physical_reference_spec_sha256": "67f3c963961871db8876e0daef9884875d24271307898d0fd9d7d392c26e7f4c",
+    "classification": "analytic_synthetic_not_physical"
+  },
+  "software_and_analytic_gates": {
+    "radiant_build": true,
+    "hts_addon": true,
+    "spatial_and_faceted_geometry": true,
+    "curvature_analytic": true,
+    "evaluated_gd_adapter_software": true,
+    "gdbco_capture_source_analytic": true,
+    "heating_ledger_analytic": true,
+    "response_group_condensation": true,
+    "activation_delayed_source_software": true,
+    "uncertainty_and_convergence": true,
+    "material_registry_and_bindings": true,
+    "closed_coupling_software": true,
+    "em_analytic": true,
+    "opensn_radiant_interface_software": true
+  },
+  "physical_gates": {
+    "radiant_em_physical": false,
+    "openmc_replay": false,
+    "opensn_replay": false,
+    "closed_physical_coupling": false,
+    "atlas": false,
+    "curved_transport": false,
+    "evaluated_gd_physical": false,
+    "material_physical": false,
+    "activation_physical": false
+  },
+  "physical_status": "FAIL_CLOSED_MISSING_QUALIFIED_PHYSICAL_INPUT_PACKAGE"
+}
