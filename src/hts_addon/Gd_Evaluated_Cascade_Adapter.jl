@@ -10,7 +10,8 @@ struct Evaluated_Gd_Cascade_Dataset
 end
 
 function _cascade_species(value::AbstractString)
-    normalized = lowercase(replace(strip(value),'-' => '_',' ' => '_'))
+    stripped = String(strip(value))
+    normalized = lowercase(replace(replace(stripped,'-' => '_'),' ' => '_'))
     mapping = Dict(
         "photon" => :photon,
         "gamma" => :photon,
