@@ -57,6 +57,8 @@ jobs:
         run: julia --startup-file=no --project=. test/hts_group_condensation_tests.jl
       - name: Run HTS material response-table tests
         run: julia --startup-file=no --project=. test/hts_response_table_completion_tests.jl
+      - name: Run atomistic-to-material data-binding tests
+        run: julia --startup-file=no --project=. test/hts_material_data_bindings_tests.jl
       - name: Run physical-reference bundle tests
         run: julia --startup-file=no --project=. test/hts_physical_reference_bundle_tests.jl
       - name: Record branch-only qualification
@@ -65,7 +67,7 @@ jobs:
         run: |
           mkdir -p artifacts/hts-addon
           {
-            echo 'schema = "radiant.hts_addon_test_receipt/v9"'
+            echo 'schema = "radiant.hts_addon_test_receipt/v10"'
             echo 'branch_policy = "branch-only-no-pr"'
             echo 'future_package = "RadiantHTS.jl"'
             echo 'julia_version = "${{ matrix.julia-version }}"'
@@ -83,6 +85,7 @@ jobs:
             echo 'material_registry_tested = true'
             echo 'atomistic_table_pipeline_tested = true'
             echo 'material_response_completion_tested = true'
+            echo 'material_data_bindings_tested = true'
             echo 'physical_reference_bundle_tested = true'
             echo 'closed_coupling_algorithm_tested = true'
             echo 'physical_openmc_replay_pass = false'
