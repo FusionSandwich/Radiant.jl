@@ -76,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v6",
+        "schema" => "radiant.julia_qualification/v7",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -101,6 +101,8 @@ function main()
             "CURVATURE_HEATING_ANALYTIC_PASS" => false,
             "CURVATURE_CONVERGENCE_SOFTWARE_PASS" => false,
             "EVALUATED_GD_ADAPTER_SOFTWARE_PASS" => false,
+            "GDBCO_SELF_SHIELDING_ANALYTIC_PASS" => false,
+            "HTS_HEATING_LEDGER_SOFTWARE_PASS" => false,
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
             "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
             "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS" => false,
@@ -150,6 +152,7 @@ function main()
         ("hts_gd_evaluated_tests","hts_gd_evaluated_tests.jl"),
         ("hts_response_table_completion_tests","hts_response_table_completion_tests.jl"),
         ("hts_physical_reference_bundle_tests","hts_physical_reference_bundle_tests.jl"),
+        ("hts_neutronics_heating_tests","hts_neutronics_heating_tests.jl"),
     )
     for (step_name,test_file) in test_matrix
         run_step!(receipt,step_name) do
@@ -160,7 +163,8 @@ function main()
         "HTS_ADDON_SOFTWARE_PASS","SPATIAL_FIELD_SOFTWARE_PASS",
         "FACETED_GEOMETRY_SOFTWARE_PASS","FACETED_LOCAL_DOMAIN_SOFTWARE_PASS",
         "CURVATURE_HEATING_ANALYTIC_PASS","CURVATURE_CONVERGENCE_SOFTWARE_PASS",
-        "EVALUATED_GD_ADAPTER_SOFTWARE_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
+        "EVALUATED_GD_ADAPTER_SOFTWARE_PASS","GDBCO_SELF_SHIELDING_ANALYTIC_PASS",
+        "HTS_HEATING_LEDGER_SOFTWARE_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
         "ATOMISTIC_RESPONSE_PIPELINE_PASS","MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS",
         "PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
     )
