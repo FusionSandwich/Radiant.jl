@@ -30,6 +30,8 @@ jobs:
         run: |
           python -m py_compile scripts/geometry/export_dagmc_facets.py
           python -m py_compile scripts/data/download_zenodo_record.py
+          python -m py_compile scripts/references/create_physical_reference_fixture.py
+          python -m py_compile scripts/references/build_physical_reference_bundle.py
       - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.julia-version }}
@@ -51,13 +53,15 @@ jobs:
         run: julia --startup-file=no --project=. test/hts_gd_evaluated_tests.jl
       - name: Run HTS material response-table tests
         run: julia --startup-file=no --project=. test/hts_response_table_completion_tests.jl
+      - name: Run physical-reference bundle tests
+        run: julia --startup-file=no --project=. test/hts_physical_reference_bundle_tests.jl
       - name: Record branch-only qualification
         if: always()
         shell: bash
         run: |
           mkdir -p artifacts/hts-addon
           {
-            echo 'schema = "radiant.hts_addon_test_receipt/v6"'
+            echo 'schema = "radiant.hts_addon_test_receipt/v7"'
             echo 'branch_policy = "branch-only-no-pr"'
             echo 'future_package = "RadiantHTS.jl"'
             echo 'julia_version = "${{ matrix.julia-version }}"'
@@ -72,7 +76,7 @@ jobs:
             echo 'material_registry_tested = true'
             echo 'atomistic_table_pipeline_tested = true'
             echo 'material_response_completion_tested = true'
-            echo 'physical_reference_contract_tested = true'
+            echo 'physical_reference_bundle_tested = true'
             echo 'closed_coupling_algorithm_tested = true'
             echo 'physical_openmc_replay_pass = false'
             echo 'physical_opensn_replay_pass = false'
