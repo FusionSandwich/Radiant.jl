@@ -1,4 +1,5 @@
 const PHYSICAL_REFERENCE_BUNDLE_SCHEMA = "radiant.hts.physical_reference_bundle/v2"
+const PHYSICAL_REFERENCE_STORAGE_ORDER = "canonical-c-row-major-flat/v1"
 
 """Hash-bound collection of current-format physical reference responses."""
 struct Physical_Reference_Bundle
@@ -84,10 +85,12 @@ function write_physical_reference_bundle_hdf5(
         meta = HDF5.create_group(file,"meta")
         response_group = HDF5.create_group(file,"responses")
         meta["schema"] = PHYSICAL_REFERENCE_BUNDLE_SCHEMA
-        meta["storage_order"] = SOURCE_HDF5_STORAGE_ORDER
+        meta["storage_order"] = PHYSICAL_REFERENCE_STORAGE_ORDER
         meta["response_count"] = Int64(length(bundle.responses))
         _write_atomistic_dictionary(meta,"metadata",bundle.metadata)
-        ordered = sort(collect(values(bundle.responses));by=response -> response.response_id)
+        ordered = sort(
+            collect(Base.values(bundle.responses));by=response -> response.response_id,
+        )
         for (index,response) in enumerate(ordered)
             entry = HDF5.create_group(response_group,@sprintf("entry_%06d",index))
             _write_physical_response(entry,response)
@@ -151,7 +154,7 @@ function read_physical_reference_bundle_hdf5(
         _read_physical_string(meta,"schema") == PHYSICAL_REFERENCE_BUNDLE_SCHEMA || error(
             "Unsupported physical reference bundle schema.",
         )
-        _read_physical_string(meta,"storage_order") == SOURCE_HDF5_STORAGE_ORDER || error(
+        _read_physical_string(meta,"storage_order") == PHYSICAL_REFERENCE_STORAGE_ORDER || error(
             "Unsupported physical reference tensor storage order.",
         )
         count = Int(read(meta["response_count"]))
@@ -174,7 +177,7 @@ end
 
 function references_by_process_key(bundle::Physical_Reference_Bundle)
     output = Dict{String,Physical_Reference_Response}()
-    for response in values(bundle.responses)
+    for response in Base.values(bundle.responses)
         haskey(output,response.process_key) && error(
             "More than one physical reference uses process key $(response.process_key).",
         )
@@ -207,32 +210,31 @@ function qualify_process_score_from_reference_bundle(
 end
 
 function physical_reference_bundle_receipt(bundle::Physical_Reference_Bundle)
+    all_responses = collect(Base.values(bundle.responses))
     return Dict{String,Any}(
         "schema" => bundle.schema,
+        "storage_order" => PHYSICAL_REFERENCE_STORAGE_ORDER,
         "artifact_sha256" => isnothing(bundle.artifact_sha256) ?
             "in-memory-not-written" : bundle.artifact_sha256,
         "response_count" => length(bundle.responses),
         "response_ids" => sort(collect(keys(bundle.responses))),
         "classifications" => sort(unique(
-            string(response.classification) for response in values(bundle.responses)
+            string(response.classification) for response in all_responses
         )),
-        "producers" => sort(unique(
-            response.producer for response in values(bundle.responses)
-        )),
+        "producers" => sort(unique(response.producer for response in all_responses)),
         "source_artifact_hashes" => sort(unique(
-            response.source_artifact_hash for response in values(bundle.responses)
+            response.source_artifact_hash for response in all_responses
         )),
         "geometry_hashes" => sort(unique(
-            response.geometry_hash for response in values(bundle.responses)
+            response.geometry_hash for response in all_responses
         )),
-        "physical_reference_only" => all(
-            reference_is_physical(response) for response in values(bundle.responses)
-        ),
+        "physical_reference_only" => all(reference_is_physical,all_responses),
         "metadata" => copy(bundle.metadata),
     )
 end
 
-export PHYSICAL_REFERENCE_BUNDLE_SCHEMA,Physical_Reference_Bundle
+export PHYSICAL_REFERENCE_BUNDLE_SCHEMA,PHYSICAL_REFERENCE_STORAGE_ORDER
+export Physical_Reference_Bundle
 export write_physical_reference_bundle_hdf5,read_physical_reference_bundle_hdf5
 export references_by_process_key,references_by_response_id
 export qualify_process_score_from_reference_bundle,physical_reference_bundle_receipt
