@@ -113,9 +113,12 @@ using LinearAlgebra
     @test get_incoming_current(replayed_sources[:back]) ≈ get_incoming_current(source)
     @test replayed_receipts[:back].local_source_hash == receipts[:back].local_source_hash
 
-    @test_throws ErrorException Facet_Boundary_Map(
+    wrong_mapping = Facet_Boundary_Map(
         source.normalization.source_hash,
         "wrong-geometry-hash",
         typed_mapping.mappings,
-    ) |> mapping -> localize_boundary_source_to_facet(source,mapping,domain)
+    )
+    @test_throws ErrorException localize_boundary_source_to_facet(
+        source,wrong_mapping,domain,
+    )
 end
