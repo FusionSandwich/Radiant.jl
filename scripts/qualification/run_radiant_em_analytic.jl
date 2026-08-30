@@ -35,13 +35,25 @@ function main()
     geometry.type = "cartesian"
     geometry.dimension = 1
     geometry.axis = ["x"]
+    geometry.number_of_regions["x"] = 1
+    geometry.voxels_per_region["x"] = [1]
+    geometry.region_boundaries["x"] = [0.0,1.0]
     geometry.number_of_voxels["x"] = 1
     geometry.voxels_width["x"] = [1.0]
     geometry.voxels_position["x"] = [0.5]
     geometry.voxels_boundaries["x"] = [0.0,1.0]
+    geometry.boundary_conditions["X-"] = "void"
+    geometry.boundary_conditions["X+"] = "void"
     geometry.volume_per_voxel = [1.0]
     geometry.material_per_voxel = ones(Int64,1,1,1)
     geometry.is_build = true
+
+    # Fail early with a useful diagnostic if a hand-built qualification fixture no longer
+    # satisfies the same boundary contract consumed by the production transport path.
+    boundary_conditions = Radiant.get_boundary_conditions(geometry)
+    boundary_conditions == ["void","void"] || error(
+        "Analytic fixture boundary ordering is inconsistent with the 1-D SN sweep.",
+    )
 
     solver = SN()
     Radiant.set_particle(solver,photon)
@@ -116,6 +128,7 @@ function main()
         "source_hash" => normalization.source_hash,
         "spatial_scheme" => "DD1",
         "quadrature" => "Gauss-Legendre-2",
+        "boundary_conditions" => boundary_conditions,
         "mu" => mu,
         "sigma_absorption_cm-1" => sigma_absorption,
         "expected_scalar_flux" => expected_scalar_flux,
