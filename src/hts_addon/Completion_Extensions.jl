@@ -8,3 +8,4 @@ include(joinpath(@__DIR__,"Response_Table_Completion.jl"))
 
 export Evaluated_Gd_Cascade_Dataset,read_evaluated_gd_cascade_csv
 export evaluated_gd_dataset_is_production_ready,gd_dataset_receipt
+export SUBKEV_PARTITION_CHANNELS
