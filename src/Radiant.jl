@@ -82,7 +82,9 @@ module Radiant
         "Spatial_Magnetic_Field_Map.jl",
         "Spatial_Field_Transport.jl",
         "Piecewise_Flat_Tape_Atlas.jl",
+        "Analytic_Curvature_Benchmark.jl",
         "Faceted_Geometry.jl",
+        "Faceted_Local_Tape_Domain.jl",
         "Gd_Prompt_Capture_Cascade.jl",
         "Gd_Cascade_Data_Adapter.jl",
         "SubkeV_Thermalization.jl",
@@ -169,12 +171,23 @@ module Radiant
     export electromagnetic_field_for_patch,get_atlas_patch,get_atlas_patch_at_arc_length
     export atlas_refinement_report
 
+    export Cylindrical_Shell_Path_Result,cylindrical_shell_critical_cosine
+    export cylindrical_shell_path,pure_absorption_fraction
+    export Cylindrical_Shell_Heating_Result,cylindrical_shell_heating
+    export Curvature_Heating_Screen,screen_cylindrical_shell_heating
+    export maximum_facet_chord_for_sagitta,curvature_heating_receipt
+
     export FACETED_GEOMETRY_HDF5_SCHEMA,Faceted_Surface_Mesh,facet_geometry
     export faceted_topology_report,assert_transport_ready_facets
     export write_faceted_geometry_hdf5,read_faceted_geometry_hdf5
     export read_obj_facets,read_ascii_stl_facets,point_in_faceted_volume
     export Faceted_Voxelization,voxelize_faceted_mesh
     export Faceted_Tape_Patch,build_faceted_tape_patches,map_boundary_patches_to_facets
+    export Facet_Boundary_Mapping_Entry,Facet_Boundary_Map,facet_boundary_map
+    export Faceted_Local_Tape_Domain,Faceted_Local_Source_Receipt
+    export build_faceted_local_tape_domain,local_domain_frame
+    export global_to_local,local_to_global,local_layer_for_voxel
+    export localize_boundary_source_to_facet,faceted_local_domain_receipt
 
     export Capture_Emission_Line,Gd_Prompt_Capture_Cascade,Capture_Rate_Field
     export Gd_Capture_Recoil_Source,Gd_Capture_Source_Bundle
