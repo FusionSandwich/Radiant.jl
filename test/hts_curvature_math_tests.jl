@@ -19,7 +19,9 @@ using Test
     @test through.reaches_inner_surface
     @test !miss.reaches_inner_surface
     @test miss.endpoint_radius_cm ≈ radius+0.5*thickness rtol=1.0e-11
-    @test miss.planar_path_cm > miss.exact_path_cm
+    # Below the tangency threshold the ray remains in the shell until it re-crosses the outer
+    # surface; the curved chord is therefore longer than the local planar thickness/mu path.
+    @test miss.exact_path_cm > miss.planar_path_cm
 
     sigma = 0.3
     normal_heating = cylindrical_shell_heating(radius,thickness,1.0,sigma)
@@ -44,6 +46,7 @@ using Test
     @test !grazing_screen.all_rays_reach_inner_surface
     @test !grazing_screen.planar_response_pass
     @test grazing_screen.maximum_path_relative_difference > 0.0
+    @test grazing_screen.maximum_absorbed_fraction_relative_difference > 0.0
 
     @test maximum_facet_chord_for_sagitta(10.0,0.0) == 0.0
     chord = maximum_facet_chord_for_sagitta(10.0,0.01)
