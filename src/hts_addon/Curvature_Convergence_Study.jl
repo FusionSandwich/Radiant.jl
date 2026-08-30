@@ -45,10 +45,12 @@ struct Curvature_Refinement_Level
         end
         hotspots = Dict{String,String}()
         for (key,value) in hotspot_ids
-            haskey(response_values,string(key)) || error(
+            key_string = string(key)
+            haskey(response_values,key_string) || error(
                 "Hotspot identity was supplied for an unknown response.",
             )
-            hotspots[string(key)] = string(value)
+            isempty(string(value)) && error("Hotspot identifiers cannot be empty.")
+            hotspots[key_string] = string(value)
         end
         metadata_string = Dict{String,String}()
         for (key,value) in metadata
@@ -61,222 +63,242 @@ struct Curvature_Refinement_Level
     end
 end
 
-struct Curvature_Response_Estimate
+struct Curvature_Response_Convergence
     response_id::String
-    coarse_to_medium_change::Float64
-    medium_to_fine_change::Float64
+    level_values::Vector{Float64}
+    level_standard_uncertainties::Vector{Float64}
+    coarse_to_medium_relative_change::Float64
+    medium_to_fine_relative_change::Float64
+    monotonic::Bool
     observed_order::Union{Nothing,Float64}
     richardson_limit::Union{Nothing,Float64}
-    fine_grid_gci::Union{Nothing,Float64}
-    combined_standard_uncertainty::Float64
+    fine_grid_convergence_index::Union{Nothing,Float64}
     hotspot_stable::Bool
-    curved_reference_comparison::Union{Nothing,Matched_Response_Comparison}
-    pass::Bool
-    notes::String
+    software_pass::Bool
+    physical_comparison::Union{Nothing,Matched_Response_Comparison}
+    physical_pass::Bool
 end
 
-struct Curvature_Convergence_Result
+struct Curvature_Convergence_Study
     schema::String
     levels::Vector{Curvature_Refinement_Level}
-    estimates::Dict{String,Curvature_Response_Estimate}
-    common_source_hash::String
-    all_responses_pass::Bool
-    physical_curved_reference_present::Bool
+    responses::Dict{String,Curvature_Response_Convergence}
+    source_hash::String
+    response_relative_tolerance::Float64
+    response_absolute_tolerance::Float64
+    uncertainty_multiplier::Float64
+    software_pass::Bool
+    physical_reference_present::Bool
     production_pass::Bool
     metadata::Dict{String,String}
 end
 
-function _symmetric_relative_change(first::Float64,second::Float64;atol::Float64=1.0e-30)
-    return abs(second-first)/max(abs(first),abs(second),atol)
+function _curvature_relative_change(current::Float64,previous::Float64)
+    return abs(current-previous)/max(abs(current),abs(previous),eps(Float64))
+end
+
+function _hotspot_stable(levels::Vector{Curvature_Refinement_Level},response_id::String)
+    supplied = [
+        level.hotspot_ids[response_id] for level in levels
+        if haskey(level.hotspot_ids,response_id)
+    ]
+    isempty(supplied) && return true
+    length(supplied) == length(levels) || return false
+    return length(unique(supplied)) == 1
 end
 
 function _observed_order_and_limit(
-    values::NTuple{3,Float64},
-    sizes::NTuple{3,Float64},
+    h_coarse::Float64,
+    h_medium::Float64,
+    h_fine::Float64,
+    coarse::Float64,
+    medium::Float64,
+    fine::Float64;
+    ratio_tolerance::Real=0.05,
 )
-    y1,y2,y3 = values
-    h1,h2,h3 = sizes
-    d12 = y1-y2
-    d23 = y2-y3
-    if d12 == 0.0 || d23 == 0.0 || sign(d12) != sign(d23)
+    ratio_coarse = h_coarse/h_medium
+    ratio_fine = h_medium/h_fine
+    ratio_coarse > 1.0 && ratio_fine > 1.0 || return nothing,nothing,nothing
+    isapprox(ratio_coarse,ratio_fine;rtol=ratio_tolerance,atol=0.0) ||
         return nothing,nothing,nothing
-    end
-    r12 = h1/h2
-    r23 = h2/h3
-    r12 > 1.0 && r23 > 1.0 || return nothing,nothing,nothing
-    if !isapprox(r12,r23;rtol=0.05,atol=0.0)
+    difference_coarse = medium-coarse
+    difference_fine = fine-medium
+    difference_coarse == 0.0 || difference_fine == 0.0 ||
+        signbit(difference_coarse) != signbit(difference_fine) &&
         return nothing,nothing,nothing
-    end
-    ratio = abs(d12/d23)
-    ratio > 0.0 || return nothing,nothing,nothing
-    p = log(ratio)/log(sqrt(r12*r23))
-    isfinite(p) && p > 0.0 || return nothing,nothing,nothing
-    r = r23
-    denominator = r^p-1.0
+    ratio = sqrt(ratio_coarse*ratio_fine)
+    order = log(abs(difference_coarse/difference_fine))/log(ratio)
+    isfinite(order) && order > 0.0 || return nothing,nothing,nothing
+    denominator = ratio^order-1.0
     denominator > 0.0 || return nothing,nothing,nothing
-    limit = y3+(y3-y2)/denominator
-    gci = 1.25*abs(y3-y2)/denominator/max(abs(y3),eps(Float64))
-    return p,limit,gci
+    limit = fine+difference_fine/denominator
+    gci = 1.25*abs(difference_fine)/max(abs(fine),eps(Float64))/denominator
+    return order,limit,gci
 end
 
 """
-    qualify_curvature_convergence(levels; ...)
+    evaluate_curvature_convergence(levels; ...)
 
-Estimate faceting-response uncertainty from at least three nested levels. Levels are sorted from
-coarse to fine by characteristic facet size. The same source hash is required at every level.
-A Richardson/GCI estimate is reported only for monotone, approximately uniform refinement.
-
-A software convergence pass is not promoted to `production_pass` unless every protected response
-also has a physical curved-reference comparison that passes its declared tolerances.
+Evaluate at least three nested facet levels. Levels are sorted coarse-to-fine by characteristic
+facet size. A software pass requires stable response keys, source identity, decreasing sagitta,
+medium-to-fine response closure, and hotspot stability. Production pass additionally requires a
+matched physical curved reference (OpenSn, continuous-energy OpenMC, or experiment are sufficient;
+Geant4 is not mandatory).
 """
-function qualify_curvature_convergence(
-    levels::AbstractVector{Curvature_Refinement_Level};
-    relative_tolerances::AbstractDict,
-    absolute_tolerances::AbstractDict=Dict{String,Float64}(),
-    curved_references::AbstractDict=Dict{String,Physical_Reference_Response}(),
-    reference_uncertainty_multiplier::Real=2.0,
-    require_hotspot_stability::Bool=true,
+function evaluate_curvature_convergence(
+    levels_input::AbstractVector{Curvature_Refinement_Level};
+    response_relative_tolerance::Real,
+    response_absolute_tolerance::Real=0.0,
+    uncertainty_multiplier::Real=2.0,
+    physical_references::Union{Nothing,AbstractDict}=nothing,
+    require_monotonic::Bool=true,
     metadata::AbstractDict=Dict{String,String}(),
 )
-    level_vector = sort(Curvature_Refinement_Level[levels...];
-                        by=level -> level.characteristic_facet_size_cm,rev=true)
-    length(level_vector) >= 3 || error(
-        "Curvature convergence requires at least three nested facet levels.",
+    levels = sort(Curvature_Refinement_Level[levels_input...];
+                  by=level -> level.characteristic_facet_size_cm,rev=true)
+    length(levels) >= 3 || error("Curvature convergence requires at least three facet levels.")
+    level_ids = getfield.(levels,:level_id)
+    length(unique(level_ids)) == length(level_ids) || error(
+        "Curvature refinement level identifiers must be unique.",
     )
-    source_hashes = unique(getfield.(level_vector,:source_hash))
+    h = getfield.(levels,:characteristic_facet_size_cm)
+    all(diff(h) .< 0.0) || error("Facet sizes must decrease strictly from coarse to fine.")
+    sagittas = getfield.(levels,:maximum_sagitta_cm)
+    all(diff(sagittas) .<= 0.0) || error(
+        "Maximum sagitta must not increase under facet refinement.",
+    )
+    source_hashes = unique(getfield.(levels,:source_hash))
     length(source_hashes) == 1 || error(
-        "Curvature levels must use the same hash-bound source.",
+        "Every curvature level must use the same source artifact.",
     )
-    for index in 2:length(level_vector)
-        level_vector[index].characteristic_facet_size_cm <
-            level_vector[index-1].characteristic_facet_size_cm || error(
-            "Curvature facet sizes must strictly decrease after sorting.",
+    response_keys = sort(collect(keys(levels[1].responses)))
+    for level in levels[2:end]
+        sort(collect(keys(level.responses))) == response_keys || error(
+            "Curvature levels do not expose identical protected responses.",
         )
     end
-    response_sets = [Set(keys(level.responses)) for level in level_vector]
-    all(response_sets[index] == response_sets[1] for index in 2:length(response_sets)) || error(
-        "Every curvature level must contain the same response identifiers.",
+    rtol = Float64(response_relative_tolerance)
+    atol = Float64(response_absolute_tolerance)
+    multiplier = Float64(uncertainty_multiplier)
+    all(value -> isfinite(value) && value >= 0.0,(rtol,atol,multiplier)) || error(
+        "Curvature convergence tolerances must be finite and nonnegative.",
     )
-    response_ids = sort(collect(response_sets[1]))
-    for response_id in response_ids
-        haskey(relative_tolerances,response_id) || error(
-            "No relative curvature tolerance was supplied for $(response_id).",
-        )
-    end
 
-    estimates = Dict{String,Curvature_Response_Estimate}()
-    fine = level_vector[end]
-    medium = level_vector[end-1]
-    coarse = level_vector[end-2]
-    for response_id in response_ids
-        coarse_change = _symmetric_relative_change(
-            coarse.responses[response_id],medium.responses[response_id],
+    response_results = Dict{String,Curvature_Response_Convergence}()
+    physical_present = !isnothing(physical_references)
+    for response_id in response_keys
+        values = [level.responses[response_id] for level in levels]
+        uncertainty = [level.standard_uncertainties[response_id] for level in levels]
+        coarse_to_medium = _curvature_relative_change(values[2],values[1])
+        medium_to_fine = _curvature_relative_change(values[end],values[end-1])
+        difference_coarse = values[end-1]-values[end-2]
+        difference_fine = values[end]-values[end-1]
+        monotonic = difference_coarse == 0.0 || difference_fine == 0.0 ||
+                    signbit(difference_coarse) == signbit(difference_fine)
+        order,limit,gci = _observed_order_and_limit(
+            h[end-2],h[end-1],h[end],values[end-2],values[end-1],values[end],
         )
-        fine_change = _symmetric_relative_change(
-            medium.responses[response_id],fine.responses[response_id],
+        hotspot_stable = _hotspot_stable(levels,response_id)
+        combined_uncertainty = sqrt(
+            uncertainty[end]^2+uncertainty[end-1]^2,
         )
-        p,limit,gci = _observed_order_and_limit(
-            (coarse.responses[response_id],medium.responses[response_id],
-             fine.responses[response_id]),
-            (coarse.characteristic_facet_size_cm,medium.characteristic_facet_size_cm,
-             fine.characteristic_facet_size_cm),
-        )
-        uncertainty = sqrt(
-            medium.standard_uncertainties[response_id]^2+
-            fine.standard_uncertainties[response_id]^2,
-        )
-        hotspot_values = String[]
-        for level in level_vector
-            haskey(level.hotspot_ids,response_id) && push!(hotspot_values,
-                                                           level.hotspot_ids[response_id])
-        end
-        hotspot_stable = isempty(hotspot_values) || length(unique(hotspot_values)) == 1
-        relative_tolerance = Float64(relative_tolerances[response_id])
-        absolute_tolerance = Float64(get(absolute_tolerances,response_id,0.0))
-        convergence_pass = fine_change <= relative_tolerance ||
-            abs(fine.responses[response_id]-medium.responses[response_id]) <= absolute_tolerance
-        if !isnothing(gci)
-            convergence_pass &= gci <= relative_tolerance
-        end
-        require_hotspot_stability && (convergence_pass &= hotspot_stable)
+        allowed_difference = atol+rtol*abs(values[end])+multiplier*combined_uncertainty
+        software_pass = abs(values[end]-values[end-1]) <= allowed_difference &&
+                        hotspot_stable && (!require_monotonic || monotonic)
 
-        reference_comparison = nothing
-        if haskey(curved_references,response_id)
-            candidate_uncertainty = fine.standard_uncertainties[response_id]
-            reference_comparison = compare_matched_response(
-                fine.responses[response_id],curved_references[response_id];
-                candidate_standard_uncertainty=candidate_uncertainty,
-                relative_tolerance=relative_tolerance,
-                absolute_tolerance=absolute_tolerance,
-                uncertainty_multiplier=reference_uncertainty_multiplier,
+        physical_comparison = nothing
+        physical_pass = false
+        if physical_present
+            haskey(physical_references,response_id) || error(
+                "Physical curved reference is missing response $(response_id).",
             )
+            reference = physical_references[response_id]
+            reference isa Physical_Reference_Response || error(
+                "Curved physical reference has the wrong type for $(response_id).",
+            )
+            reference_is_physical(reference) || error(
+                "Curvature production qualification requires a physical reference.",
+            )
+            reference.source_artifact_hash == first(source_hashes) || error(
+                "Curved reference source hash does not match refinement levels.",
+            )
+            length(reference.values) == 1 || error(
+                "Scalar curvature convergence requires a scalar physical reference.",
+            )
+            physical_comparison = compare_matched_response(
+                reshape([values[end]],1),reshape([uncertainty[end]],1),reference;
+                response_id=response_id,
+                process_key=reference.process_key,
+                relative_tolerance=rtol,
+                absolute_tolerance=atol,
+                uncertainty_multiplier=multiplier,
+                allow_shape_flattening=true,
+            )
+            physical_pass = physical_comparison.passed
         end
-        pass_value = convergence_pass &&
-            (isnothing(reference_comparison) || reference_comparison.pass)
-        notes = if isnothing(p)
-            "Refinement was non-monotone or not approximately uniform; no Richardson/GCI claim."
-        else
-            "Monotone approximately uniform refinement supported Richardson/GCI estimation."
-        end
-        estimates[response_id] = Curvature_Response_Estimate(
-            response_id,coarse_change,fine_change,p,limit,gci,uncertainty,
-            hotspot_stable,reference_comparison,pass_value,notes,
+        response_results[response_id] = Curvature_Response_Convergence(
+            response_id,values,uncertainty,coarse_to_medium,medium_to_fine,monotonic,
+            order,limit,gci,hotspot_stable,software_pass,physical_comparison,physical_pass,
         )
     end
-
-    all_pass = all(estimate.pass for estimate in values(estimates))
-    physical_reference_present = all(
-        haskey(curved_references,response_id) &&
-        reference_is_physical(curved_references[response_id])
-        for response_id in response_ids
-    )
-    production_pass = all_pass && physical_reference_present
+    software_pass = all(result.software_pass for result in values(response_results))
+    production_pass = software_pass && physical_present &&
+        all(result.physical_pass for result in values(response_results))
     metadata_string = Dict{String,String}(
-        "classification" => production_pass ? "physical-curvature-qualified" :
-            "software-convergence-only",
-        "minimum_levels" => "3",
-        "gci_safety_factor" => "1.25",
+        "classification" => "facet-refinement-study",
+        "physical_reference_required_for_production" => "true",
+        "geant4_required" => "false",
+        "accepted_reference_classes" => "opensn,continuous_energy_openmc,experiment,geant4",
     )
     for (key,value) in metadata
         metadata_string[string(key)] = string(value)
     end
-    return Curvature_Convergence_Result(
-        "radiant.hts.curvature_convergence/v1",level_vector,estimates,
-        source_hashes[1],all_pass,physical_reference_present,production_pass,
-        metadata_string,
+    return Curvature_Convergence_Study(
+        "radiant.hts.curvature_convergence/v2",levels,response_results,
+        first(source_hashes),rtol,atol,multiplier,software_pass,physical_present,
+        production_pass,metadata_string,
     )
 end
 
-function curvature_convergence_receipt(result::Curvature_Convergence_Result)
+function curvature_convergence_receipt(study::Curvature_Convergence_Study)
     responses = Dict{String,Any}()
-    for (key,estimate) in result.estimates
-        responses[key] = Dict{String,Any}(
-            "coarse_to_medium_relative_change" => estimate.coarse_to_medium_change,
-            "medium_to_fine_relative_change" => estimate.medium_to_fine_change,
-            "observed_order" => isnothing(estimate.observed_order) ? "unavailable" :
-                                estimate.observed_order,
-            "richardson_limit" => isnothing(estimate.richardson_limit) ? "unavailable" :
-                                  estimate.richardson_limit,
-            "fine_grid_gci" => isnothing(estimate.fine_grid_gci) ? "unavailable" :
-                               estimate.fine_grid_gci,
-            "hotspot_stable" => estimate.hotspot_stable,
-            "curved_reference_present" => !isnothing(estimate.curved_reference_comparison),
-            "pass" => estimate.pass,
-            "notes" => estimate.notes,
+    for (response_id,result) in study.responses
+        responses[response_id] = Dict{String,Any}(
+            "level_values" => result.level_values,
+            "level_standard_uncertainties" => result.level_standard_uncertainties,
+            "coarse_to_medium_relative_change" =>
+                result.coarse_to_medium_relative_change,
+            "medium_to_fine_relative_change" => result.medium_to_fine_relative_change,
+            "monotonic" => result.monotonic,
+            "observed_order" => isnothing(result.observed_order) ?
+                "not-estimated" : result.observed_order,
+            "richardson_limit" => isnothing(result.richardson_limit) ?
+                "not-estimated" : result.richardson_limit,
+            "fine_grid_convergence_index" =>
+                isnothing(result.fine_grid_convergence_index) ?
+                "not-estimated" : result.fine_grid_convergence_index,
+            "hotspot_stable" => result.hotspot_stable,
+            "software_pass" => result.software_pass,
+            "physical_pass" => result.physical_pass,
+            "physical_reference_result_hash" => isnothing(result.physical_comparison) ?
+                "not-supplied" : result.physical_comparison.metadata["result_artifact_hash"],
         )
     end
     return Dict{String,Any}(
-        "schema" => result.schema,
-        "source_hash" => result.common_source_hash,
-        "level_geometry_hashes" => getfield.(result.levels,:geometry_hash),
-        "all_responses_pass" => result.all_responses_pass,
-        "physical_curved_reference_present" => result.physical_curved_reference_present,
-        "production_pass" => result.production_pass,
+        "schema" => study.schema,
+        "source_hash" => study.source_hash,
+        "level_ids" => getfield.(study.levels,:level_id),
+        "characteristic_facet_size_cm" =>
+            getfield.(study.levels,:characteristic_facet_size_cm),
+        "maximum_sagitta_cm" => getfield.(study.levels,:maximum_sagitta_cm),
         "responses" => responses,
-        "metadata" => copy(result.metadata),
+        "software_pass" => study.software_pass,
+        "physical_reference_present" => study.physical_reference_present,
+        "production_pass" => study.production_pass,
+        "metadata" => copy(study.metadata),
     )
 end
 
-export Curvature_Refinement_Level,Curvature_Response_Estimate
-export Curvature_Convergence_Result,qualify_curvature_convergence
+export Curvature_Refinement_Level,Curvature_Response_Convergence
+export Curvature_Convergence_Study,evaluate_curvature_convergence
 export curvature_convergence_receipt
