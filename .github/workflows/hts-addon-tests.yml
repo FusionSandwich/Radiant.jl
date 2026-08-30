@@ -53,6 +53,8 @@ jobs:
         run: julia --startup-file=no --project=. test/hts_gd_evaluated_tests.jl
       - name: Run neutronics heating and Gd self-shielding tests
         run: julia --startup-file=no --project=. test/hts_neutronics_heating_tests.jl
+      - name: Run response-preserving group condensation tests
+        run: julia --startup-file=no --project=. test/hts_group_condensation_tests.jl
       - name: Run HTS material response-table tests
         run: julia --startup-file=no --project=. test/hts_response_table_completion_tests.jl
       - name: Run physical-reference bundle tests
@@ -63,7 +65,7 @@ jobs:
         run: |
           mkdir -p artifacts/hts-addon
           {
-            echo 'schema = "radiant.hts_addon_test_receipt/v8"'
+            echo 'schema = "radiant.hts_addon_test_receipt/v9"'
             echo 'branch_policy = "branch-only-no-pr"'
             echo 'future_package = "RadiantHTS.jl"'
             echo 'julia_version = "${{ matrix.julia-version }}"'
@@ -77,6 +79,7 @@ jobs:
             echo 'complete_evaluated_gd_adapter_tested = true'
             echo 'gdbco_self_shielding_screen_tested = true'
             echo 'heating_ownership_ledger_tested = true'
+            echo 'response_preserving_group_condensation_tested = true'
             echo 'material_registry_tested = true'
             echo 'atomistic_table_pipeline_tested = true'
             echo 'material_response_completion_tested = true'
