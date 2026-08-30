@@ -48,10 +48,9 @@ function main()
     geometry.material_per_voxel = ones(Int64,1,1,1)
     geometry.is_build = true
 
-    # Fail early with a useful diagnostic if a hand-built qualification fixture no longer
-    # satisfies the same boundary contract consumed by the production transport path.
+    # The sweep consumes encoded boundary values: void=0, reflective=1, periodic=2.
     boundary_conditions = Radiant.get_boundary_conditions(geometry)
-    boundary_conditions == ["void","void"] || error(
+    boundary_conditions == [0,0] || error(
         "Analytic fixture boundary ordering is inconsistent with the 1-D SN sweep.",
     )
 
@@ -128,7 +127,7 @@ function main()
         "source_hash" => normalization.source_hash,
         "spatial_scheme" => "DD1",
         "quadrature" => "Gauss-Legendre-2",
-        "boundary_conditions" => boundary_conditions,
+        "boundary_conditions_encoded" => boundary_conditions,
         "mu" => mu,
         "sigma_absorption_cm-1" => sigma_absorption,
         "expected_scalar_flux" => expected_scalar_flux,
