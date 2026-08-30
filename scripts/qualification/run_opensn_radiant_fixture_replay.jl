@@ -47,13 +47,23 @@ function main()
     geometry.type = "cartesian"
     geometry.dimension = 1
     geometry.axis = ["x"]
+    geometry.number_of_regions["x"] = 1
+    geometry.voxels_per_region["x"] = [1]
+    geometry.region_boundaries["x"] = [0.0,1.0]
     geometry.number_of_voxels["x"] = 1
     geometry.voxels_width["x"] = [1.0]
     geometry.voxels_position["x"] = [0.5]
     geometry.voxels_boundaries["x"] = [0.0,1.0]
+    geometry.boundary_conditions["X-"] = "void"
+    geometry.boundary_conditions["X+"] = "void"
     geometry.volume_per_voxel = [1.0]
     geometry.material_per_voxel = ones(Int64,1,1,1)
     geometry.is_build = true
+
+    boundary_conditions = Radiant.get_boundary_conditions(geometry)
+    boundary_conditions == ["void","void"] || error(
+        "Replay fixture boundary ordering is inconsistent with the Radiant 1-D sweep.",
+    )
 
     solver = SN()
     Radiant.set_particle(solver,photon)
@@ -134,6 +144,7 @@ function main()
         "energy_group_map" => projection_receipt.energy_group_map,
         "direction_map" => projection_receipt.direction_map,
         "surface_index" => projection_receipt.surface_index,
+        "boundary_conditions" => boundary_conditions,
         "physical_openmc_source" => false,
         "physical_opensn_solution" => false,
     )
