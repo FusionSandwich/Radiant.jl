@@ -76,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v11",
+        "schema" => "radiant.julia_qualification/v12",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -106,6 +106,7 @@ function main()
             "HTS_HEATING_LEDGER_SOFTWARE_PASS" => false,
             "RESPONSE_PRESERVING_GROUP_CONDENSATION_PASS" => false,
             "ACTIVATION_DELAYED_SOURCE_SOFTWARE_PASS" => false,
+            "PROTECTED_RESPONSE_UNCERTAINTY_CONVERGENCE_PASS" => false,
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
             "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
             "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS" => false,
@@ -161,6 +162,7 @@ function main()
         ("hts_neutronics_heating_tests","hts_neutronics_heating_tests.jl"),
         ("hts_group_condensation_tests","hts_group_condensation_tests.jl"),
         ("hts_activation_delayed_source_tests","hts_activation_delayed_source_tests.jl"),
+        ("hts_uncertainty_convergence_tests","hts_uncertainty_convergence_tests.jl"),
     )
     for (step_name,test_file) in test_matrix
         run_step!(receipt,step_name) do
@@ -173,10 +175,11 @@ function main()
         "CURVATURE_HEATING_ANALYTIC_PASS","CURVATURE_CONVERGENCE_SOFTWARE_PASS",
         "EVALUATED_GD_ADAPTER_SOFTWARE_PASS","GDBCO_SELF_SHIELDING_ANALYTIC_PASS",
         "HTS_HEATING_LEDGER_SOFTWARE_PASS","RESPONSE_PRESERVING_GROUP_CONDENSATION_PASS",
-        "ACTIVATION_DELAYED_SOURCE_SOFTWARE_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
-        "ATOMISTIC_RESPONSE_PIPELINE_PASS","MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS",
-        "MATERIAL_DATA_BINDINGS_SOFTWARE_PASS","PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS",
-        "CLOSED_COUPLING_SOFTWARE_PASS",
+        "ACTIVATION_DELAYED_SOURCE_SOFTWARE_PASS",
+        "PROTECTED_RESPONSE_UNCERTAINTY_CONVERGENCE_PASS",
+        "MATERIAL_RESPONSE_REGISTRY_PASS","ATOMISTIC_RESPONSE_PIPELINE_PASS",
+        "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS","MATERIAL_DATA_BINDINGS_SOFTWARE_PASS",
+        "PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
     )
         receipt["gates"][gate] = true
     end
