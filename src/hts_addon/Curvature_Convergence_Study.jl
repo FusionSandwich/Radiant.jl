@@ -123,9 +123,10 @@ function _observed_order_and_limit(
         return nothing,nothing,nothing
     difference_coarse = medium-coarse
     difference_fine = fine-medium
-    difference_coarse == 0.0 || difference_fine == 0.0 ||
-        signbit(difference_coarse) != signbit(difference_fine) &&
+    if difference_coarse == 0.0 || difference_fine == 0.0 ||
+       signbit(difference_coarse) != signbit(difference_fine)
         return nothing,nothing,nothing
+    end
     ratio = sqrt(ratio_coarse*ratio_fine)
     order = log(abs(difference_coarse/difference_fine))/log(ratio)
     isfinite(order) && order > 0.0 || return nothing,nothing,nothing
@@ -187,23 +188,24 @@ function evaluate_curvature_convergence(
     response_results = Dict{String,Curvature_Response_Convergence}()
     physical_present = !isnothing(physical_references)
     for response_id in response_keys
-        values = [level.responses[response_id] for level in levels]
-        uncertainty = [level.standard_uncertainties[response_id] for level in levels]
-        coarse_to_medium = _curvature_relative_change(values[2],values[1])
-        medium_to_fine = _curvature_relative_change(values[end],values[end-1])
-        difference_coarse = values[end-1]-values[end-2]
-        difference_fine = values[end]-values[end-1]
+        level_values = [level.responses[response_id] for level in levels]
+        level_uncertainty = [level.standard_uncertainties[response_id] for level in levels]
+        coarse_to_medium = _curvature_relative_change(level_values[2],level_values[1])
+        medium_to_fine = _curvature_relative_change(level_values[end],level_values[end-1])
+        difference_coarse = level_values[end-1]-level_values[end-2]
+        difference_fine = level_values[end]-level_values[end-1]
         monotonic = difference_coarse == 0.0 || difference_fine == 0.0 ||
                     signbit(difference_coarse) == signbit(difference_fine)
         order,limit,gci = _observed_order_and_limit(
-            h[end-2],h[end-1],h[end],values[end-2],values[end-1],values[end],
+            h[end-2],h[end-1],h[end],
+            level_values[end-2],level_values[end-1],level_values[end],
         )
         hotspot_stable = _hotspot_stable(levels,response_id)
         combined_uncertainty = sqrt(
-            uncertainty[end]^2+uncertainty[end-1]^2,
+            level_uncertainty[end]^2+level_uncertainty[end-1]^2,
         )
-        allowed_difference = atol+rtol*abs(values[end])+multiplier*combined_uncertainty
-        software_pass = abs(values[end]-values[end-1]) <= allowed_difference &&
+        allowed_difference = atol+rtol*abs(level_values[end])+multiplier*combined_uncertainty
+        software_pass = abs(level_values[end]-level_values[end-1]) <= allowed_difference &&
                         hotspot_stable && (!require_monotonic || monotonic)
 
         physical_comparison = nothing
@@ -226,7 +228,9 @@ function evaluate_curvature_convergence(
                 "Scalar curvature convergence requires a scalar physical reference.",
             )
             physical_comparison = compare_matched_response(
-                reshape([values[end]],1),reshape([uncertainty[end]],1),reference;
+                reshape([level_values[end]],1),
+                reshape([level_uncertainty[end]],1),
+                reference;
                 response_id=response_id,
                 process_key=reference.process_key,
                 relative_tolerance=rtol,
@@ -237,13 +241,14 @@ function evaluate_curvature_convergence(
             physical_pass = physical_comparison.passed
         end
         response_results[response_id] = Curvature_Response_Convergence(
-            response_id,values,uncertainty,coarse_to_medium,medium_to_fine,monotonic,
-            order,limit,gci,hotspot_stable,software_pass,physical_comparison,physical_pass,
+            response_id,level_values,level_uncertainty,coarse_to_medium,medium_to_fine,
+            monotonic,order,limit,gci,hotspot_stable,software_pass,
+            physical_comparison,physical_pass,
         )
     end
-    software_pass = all(result.software_pass for result in values(response_results))
+    software_pass = all(result.software_pass for result in Base.values(response_results))
     production_pass = software_pass && physical_present &&
-        all(result.physical_pass for result in values(response_results))
+        all(result.physical_pass for result in Base.values(response_results))
     metadata_string = Dict{String,String}(
         "classification" => "facet-refinement-study",
         "physical_reference_required_for_production" => "true",
