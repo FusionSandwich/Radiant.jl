@@ -12,6 +12,7 @@ include(joinpath(@__DIR__,"Layer_Heating_Ledger.jl"))
 include(joinpath(@__DIR__,"Gd_Self_Shielding_Analytic.jl"))
 include(joinpath(@__DIR__,"Response_Preserving_Group_Condensation.jl"))
 include(joinpath(@__DIR__,"Activation_Delayed_Source.jl"))
+include(joinpath(@__DIR__,"Response_Uncertainty_And_Convergence.jl"))
 
 export Evaluated_Gd_Cascade_Dataset,read_evaluated_gd_cascade_csv
 export evaluated_gd_dataset_is_production_ready,gd_dataset_receipt
@@ -44,3 +45,11 @@ export Delayed_Emission_Bin,Delayed_Decay_Scheme,Delayed_Activity_Field
 export Delayed_NonEM_Handoff,Activation_Delayed_Source_Bundle
 export build_activation_delayed_source_bundle,activation_delayed_bundle_is_production_ready
 export activation_delayed_source_receipt,synthetic_activation_decay_fixture
+
+export Response_Uncertainty_Component,Protected_Response_Uncertainty_Budget
+export add_uncertainty_component!,combined_standard_uncertainty
+export relative_combined_uncertainty,uncertainty_budget_receipt
+export Protected_Response_Convergence_Level,Protected_Response_Convergence_Result
+export evaluate_response_convergence,convergence_result_receipt
+export Multi_Axis_Response_Qualification,qualify_response_across_axes
+export multi_axis_qualification_receipt
