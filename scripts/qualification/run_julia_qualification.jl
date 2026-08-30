@@ -76,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v4",
+        "schema" => "radiant.julia_qualification/v5",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -99,8 +99,11 @@ function main()
             "FACETED_GEOMETRY_SOFTWARE_PASS" => false,
             "FACETED_LOCAL_DOMAIN_SOFTWARE_PASS" => false,
             "CURVATURE_HEATING_ANALYTIC_PASS" => false,
+            "CURVATURE_CONVERGENCE_SOFTWARE_PASS" => false,
+            "EVALUATED_GD_ADAPTER_SOFTWARE_PASS" => false,
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
             "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
+            "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS" => false,
             "CLOSED_COUPLING_SOFTWARE_PASS" => false,
             "RADIANT_EM_ANALYTIC_PASS" => false,
             "HTS_HEATING_CHAIN_ANALYTIC_PASS" => false,
@@ -111,6 +114,8 @@ function main()
             "OPENSN_RADIANT_COUPLING_PASS" => false,
             "PIECEWISE_FLAT_ATLAS_PASS" => false,
             "CURVED_TRANSPORT_PHYSICAL_PASS" => false,
+            "EVALUATED_GD_PHYSICAL_DATA_PASS" => false,
+            "YBCO_GDBCO_MATERIAL_DATA_PHYSICAL_PASS" => false,
         ),
     )
     write_receipt(receipt)
@@ -134,13 +139,17 @@ function main()
     run_step!(receipt,"package_tests") do
         Pkg.test(;coverage=false)
     end
-    for (step_name,test_file) in (
+    test_matrix = (
         ("extended_hts_tests","hts_extended_tests.jl"),
         ("hts_addon_tests","hts_addon_tests.jl"),
         ("hts_production_foundations_tests","hts_production_foundations_tests.jl"),
         ("hts_faceted_local_domain_tests","hts_faceted_local_domain_tests.jl"),
         ("hts_curvature_math_tests","hts_curvature_math_tests.jl"),
+        ("hts_curvature_convergence_tests","hts_curvature_convergence_tests.jl"),
+        ("hts_gd_evaluated_tests","hts_gd_evaluated_tests.jl"),
+        ("hts_response_table_completion_tests","hts_response_table_completion_tests.jl"),
     )
+    for (step_name,test_file) in test_matrix
         run_step!(receipt,step_name) do
             include(joinpath(ROOT,"test",test_file))
         end
@@ -148,8 +157,10 @@ function main()
     for gate in (
         "HTS_ADDON_SOFTWARE_PASS","SPATIAL_FIELD_SOFTWARE_PASS",
         "FACETED_GEOMETRY_SOFTWARE_PASS","FACETED_LOCAL_DOMAIN_SOFTWARE_PASS",
-        "CURVATURE_HEATING_ANALYTIC_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
-        "ATOMISTIC_RESPONSE_PIPELINE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
+        "CURVATURE_HEATING_ANALYTIC_PASS","CURVATURE_CONVERGENCE_SOFTWARE_PASS",
+        "EVALUATED_GD_ADAPTER_SOFTWARE_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
+        "ATOMISTIC_RESPONSE_PIPELINE_PASS","MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS",
+        "CLOSED_COUPLING_SOFTWARE_PASS",
     )
         receipt["gates"][gate] = true
     end
@@ -177,18 +188,14 @@ function main()
     write_receipt(receipt)
 
     # Analytic/software gates intentionally do not promote physical EM, OpenMC, OpenSn,
-    # curved-geometry, or closed-coupling qualification.
+    # curved-geometry, complete evaluated-data, material-data, or closed-coupling gates.
     receipt["overall_status"] = "PASS"
     receipt["completed_at"] = string(Dates.now())
     receipt["manifest_sha256_final"] = file_sha256(joinpath(ROOT,"Manifest.toml"))
     write_receipt(receipt)
-    println("RADIANT_BUILD_PASS: Julia $(VERSION)")
-    println("HTS_ADDON_SOFTWARE_PASS: Julia $(VERSION)")
-    println("FACETED_LOCAL_DOMAIN_SOFTWARE_PASS: Julia $(VERSION)")
-    println("CURVATURE_HEATING_ANALYTIC_PASS: Julia $(VERSION)")
-    println("RADIANT_EM_ANALYTIC_PASS: Julia $(VERSION)")
-    println("HTS_HEATING_CHAIN_ANALYTIC_PASS: Julia $(VERSION)")
-    println("OPENSN_RADIANT_INTERFACE_SOFTWARE_PASS: Julia $(VERSION)")
+    for gate in sort(collect(keys(receipt["gates"])))
+        receipt["gates"][gate] && println("$(gate): Julia $(VERSION)")
+    end
     println("Qualification receipt: $(RECEIPT_PATH)")
 end
 
