@@ -76,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v3",
+        "schema" => "radiant.julia_qualification/v4",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -97,6 +97,8 @@ function main()
             "HTS_ADDON_SOFTWARE_PASS" => false,
             "SPATIAL_FIELD_SOFTWARE_PASS" => false,
             "FACETED_GEOMETRY_SOFTWARE_PASS" => false,
+            "FACETED_LOCAL_DOMAIN_SOFTWARE_PASS" => false,
+            "CURVATURE_HEATING_ANALYTIC_PASS" => false,
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
             "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
             "CLOSED_COUPLING_SOFTWARE_PASS" => false,
@@ -108,6 +110,7 @@ function main()
             "PHYSICAL_OPENSN_REPLAY_PASS" => false,
             "OPENSN_RADIANT_COUPLING_PASS" => false,
             "PIECEWISE_FLAT_ATLAS_PASS" => false,
+            "CURVED_TRANSPORT_PHYSICAL_PASS" => false,
         ),
     )
     write_receipt(receipt)
@@ -131,18 +134,21 @@ function main()
     run_step!(receipt,"package_tests") do
         Pkg.test(;coverage=false)
     end
-    run_step!(receipt,"extended_hts_tests") do
-        include(joinpath(ROOT,"test","hts_extended_tests.jl"))
-    end
-    run_step!(receipt,"hts_addon_tests") do
-        include(joinpath(ROOT,"test","hts_addon_tests.jl"))
-    end
-    run_step!(receipt,"hts_production_foundations_tests") do
-        include(joinpath(ROOT,"test","hts_production_foundations_tests.jl"))
+    for (step_name,test_file) in (
+        ("extended_hts_tests","hts_extended_tests.jl"),
+        ("hts_addon_tests","hts_addon_tests.jl"),
+        ("hts_production_foundations_tests","hts_production_foundations_tests.jl"),
+        ("hts_faceted_local_domain_tests","hts_faceted_local_domain_tests.jl"),
+        ("hts_curvature_math_tests","hts_curvature_math_tests.jl"),
+    )
+        run_step!(receipt,step_name) do
+            include(joinpath(ROOT,"test",test_file))
+        end
     end
     for gate in (
         "HTS_ADDON_SOFTWARE_PASS","SPATIAL_FIELD_SOFTWARE_PASS",
-        "FACETED_GEOMETRY_SOFTWARE_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
+        "FACETED_GEOMETRY_SOFTWARE_PASS","FACETED_LOCAL_DOMAIN_SOFTWARE_PASS",
+        "CURVATURE_HEATING_ANALYTIC_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
         "ATOMISTIC_RESPONSE_PIPELINE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
     )
         receipt["gates"][gate] = true
@@ -178,6 +184,8 @@ function main()
     write_receipt(receipt)
     println("RADIANT_BUILD_PASS: Julia $(VERSION)")
     println("HTS_ADDON_SOFTWARE_PASS: Julia $(VERSION)")
+    println("FACETED_LOCAL_DOMAIN_SOFTWARE_PASS: Julia $(VERSION)")
+    println("CURVATURE_HEATING_ANALYTIC_PASS: Julia $(VERSION)")
     println("RADIANT_EM_ANALYTIC_PASS: Julia $(VERSION)")
     println("HTS_HEATING_CHAIN_ANALYTIC_PASS: Julia $(VERSION)")
     println("OPENSN_RADIANT_INTERFACE_SOFTWARE_PASS: Julia $(VERSION)")
