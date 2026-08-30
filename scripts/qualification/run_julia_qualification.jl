@@ -68,6 +68,7 @@ end
 
 function run_subqualification(script_name::String)
     script = joinpath(ROOT,"scripts","qualification",script_name)
+    isfile(script) || error("Qualification script is missing: $(script_name).")
     run(`$(Base.julia_cmd()) --startup-file=no --project=$ROOT $script`)
 end
 
@@ -75,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v2",
+        "schema" => "radiant.julia_qualification/v3",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -99,6 +100,9 @@ function main()
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
             "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
             "CLOSED_COUPLING_SOFTWARE_PASS" => false,
+            "RADIANT_EM_ANALYTIC_PASS" => false,
+            "HTS_HEATING_CHAIN_ANALYTIC_PASS" => false,
+            "OPENSN_RADIANT_INTERFACE_SOFTWARE_PASS" => false,
             "RADIANT_EM_PASS" => false,
             "PHYSICAL_OPENMC_REPLAY_PASS" => false,
             "PHYSICAL_OPENSN_REPLAY_PASS" => false,
@@ -151,16 +155,32 @@ function main()
     run_step!(receipt,"radiant_em_analytic") do
         run_subqualification("run_radiant_em_analytic.jl")
     end
+    receipt["gates"]["RADIANT_EM_ANALYTIC_PASS"] = true
+    write_receipt(receipt)
+
+    run_step!(receipt,"hts_heating_chain_analytic") do
+        run_subqualification("run_hts_heating_chain_analytic.jl")
+    end
+    receipt["gates"]["HTS_HEATING_CHAIN_ANALYTIC_PASS"] = true
+    write_receipt(receipt)
+
     run_step!(receipt,"opensn_radiant_fixture_replay") do
         run_subqualification("run_opensn_radiant_fixture_replay.jl")
     end
+    receipt["gates"]["OPENSN_RADIANT_INTERFACE_SOFTWARE_PASS"] = true
+    write_receipt(receipt)
 
+    # Analytic/software gates intentionally do not promote physical EM, OpenMC, OpenSn,
+    # curved-geometry, or closed-coupling qualification.
     receipt["overall_status"] = "PASS"
     receipt["completed_at"] = string(Dates.now())
     receipt["manifest_sha256_final"] = file_sha256(joinpath(ROOT,"Manifest.toml"))
     write_receipt(receipt)
     println("RADIANT_BUILD_PASS: Julia $(VERSION)")
     println("HTS_ADDON_SOFTWARE_PASS: Julia $(VERSION)")
+    println("RADIANT_EM_ANALYTIC_PASS: Julia $(VERSION)")
+    println("HTS_HEATING_CHAIN_ANALYTIC_PASS: Julia $(VERSION)")
+    println("OPENSN_RADIANT_INTERFACE_SOFTWARE_PASS: Julia $(VERSION)")
     println("Qualification receipt: $(RECEIPT_PATH)")
 end
 
