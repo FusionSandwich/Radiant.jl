@@ -76,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v8",
+        "schema" => "radiant.julia_qualification/v9",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -102,6 +102,7 @@ function main()
             "CURVATURE_CONVERGENCE_SOFTWARE_PASS" => false,
             "EVALUATED_GD_ADAPTER_SOFTWARE_PASS" => false,
             "GDBCO_SELF_SHIELDING_ANALYTIC_PASS" => false,
+            "GDBCO_CAPTURE_SOURCE_CHAIN_ANALYTIC_PASS" => false,
             "HTS_HEATING_LEDGER_SOFTWARE_PASS" => false,
             "RESPONSE_PRESERVING_GROUP_CONDENSATION_PASS" => false,
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
@@ -188,6 +189,12 @@ function main()
         run_subqualification("run_hts_heating_chain_analytic.jl")
     end
     receipt["gates"]["HTS_HEATING_CHAIN_ANALYTIC_PASS"] = true
+    write_receipt(receipt)
+
+    run_step!(receipt,"gdbco_capture_source_chain_analytic") do
+        run_subqualification("run_gdbco_capture_source_chain_analytic.jl")
+    end
+    receipt["gates"]["GDBCO_CAPTURE_SOURCE_CHAIN_ANALYTIC_PASS"] = true
     write_receipt(receipt)
 
     run_step!(receipt,"opensn_radiant_fixture_replay") do
