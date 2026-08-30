@@ -1,0 +1,65 @@
+name: First YBCO physical replay preflight
+
+on:
+  push:
+    branches:
+      - 'codex/**'
+  workflow_dispatch:
+
+concurrency:
+  group: first-ybco-preflight-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Python ${{ matrix.python-version }} fail-closed preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - '3.11'
+          - '3.12'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile the preflight
+        run: python -m py_compile scripts/qualification/first_ybco_physical_replay_preflight.py
+      - name: Run internal self-test
+        run: python scripts/qualification/first_ybco_physical_replay_preflight.py --self-test
+      - name: Verify the incomplete physical template fails closed
+        shell: bash
+        run: |
+          mkdir -p artifacts/first-ybco-preflight
+          set +e
+          python scripts/qualification/first_ybco_physical_replay_preflight.py \
+            data/first_physical_replay/straight_ybco_manifest_template.json \
+            --repository-root "$PWD" \
+            --output artifacts/first-ybco-preflight/template.preflight-receipt.json
+          code=$?
+          set -e
+          test "$code" -eq 2
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          receipt = json.loads(Path(
+              'artifacts/first-ybco-preflight/template.preflight-receipt.json'
+          ).read_text())
+          assert receipt['status'] == 'BLOCKED'
+          assert receipt['ready_to_execute'] is False
+          assert receipt['physical_science_pass'] is False
+          assert receipt['no_geant4_requirement'] is True
+          assert receipt['blockers']
+          PY
+      - name: Upload preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-ybco-preflight-python-${{ matrix.python-version }}
+          path: artifacts/first-ybco-preflight
+          if-no-files-found: error
