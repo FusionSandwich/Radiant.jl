@@ -5,6 +5,7 @@
 include(joinpath(@__DIR__,"CSV_Utilities.jl"))
 include(joinpath(@__DIR__,"Gd_Evaluated_Cascade_Adapter.jl"))
 include(joinpath(@__DIR__,"Response_Table_Completion.jl"))
+include(joinpath(@__DIR__,"Material_Data_Bindings.jl"))
 include(joinpath(@__DIR__,"Curvature_Convergence_Study.jl"))
 include(joinpath(@__DIR__,"Physical_Reference_Artifact.jl"))
 include(joinpath(@__DIR__,"Layer_Heating_Ledger.jl"))
@@ -14,6 +15,11 @@ include(joinpath(@__DIR__,"Response_Preserving_Group_Condensation.jl"))
 export Evaluated_Gd_Cascade_Dataset,read_evaluated_gd_cascade_csv
 export evaluated_gd_dataset_is_production_ready,gd_dataset_receipt
 export SUBKEV_PARTITION_CHANNELS
+
+export Tabulated_Material_Property,material_property_standard_uncertainty
+export register_material_property!,cryogenic_property_from_atomistic_table
+export material_record_from_atomistic_table,subkev_kernel_from_atomistic_table
+export hts_material_response_source_map
 
 export Layer_Heating_Contribution,Layer_Heating_Ledger,heating_ownership_key
 export add_heating_contribution!,get_heating_contribution,production_heating_total
