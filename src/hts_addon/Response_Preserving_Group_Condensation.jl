@@ -120,21 +120,21 @@ end
 function _numeric_vector_hash(values::AbstractVector{<:Real})
     io = IOBuffer()
     for value in Float64.(values)
-        write(io,repr(value))
-        write(io,UInt8('\n'))
+        Base.write(io,repr(value))
+        Base.write(io,UInt8('\n'))
     end
     return bytes2hex(SHA.sha256(take!(io)))
 end
 
 function group_condensation_map_hash(mapping::Energy_Group_Condensation_Map)
     io = IOBuffer()
-    write(io,"radiant.hts.energy_group_condensation_map/v1\n")
+    Base.write(io,"radiant.hts.energy_group_condensation_map/v1\n")
     for edge in mapping.fine_edges_eV
-        write(io,repr(edge)); write(io,UInt8('\n'))
+        Base.write(io,repr(edge)); Base.write(io,UInt8('\n'))
     end
-    write(io,"coarse\n")
+    Base.write(io,"coarse\n")
     for edge in mapping.coarse_edges_eV
-        write(io,repr(edge)); write(io,UInt8('\n'))
+        Base.write(io,repr(edge)); Base.write(io,UInt8('\n'))
     end
     return bytes2hex(SHA.sha256(take!(io)))
 end

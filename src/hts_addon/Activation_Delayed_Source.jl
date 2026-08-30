@@ -366,18 +366,18 @@ function build_activation_delayed_source_bundle(
 
     total_activity = sum(activity.activity_Bq)
     q_rate = total_activity*scheme.q_value_eV
-    em_rate = total_activity*sum(
+    em_rate = total_activity*sum(Float64[
         emission.representative_energy_eV*emission.yield_per_decay
         for emission in scheme.emissions if emission.species in (:photon,:electron,:positron)
-    )
-    non_em_rate = total_activity*sum(
+    ])
+    non_em_rate = total_activity*sum(Float64[
         emission.representative_energy_eV*emission.yield_per_decay
         for emission in scheme.emissions if emission.species in (:alpha,:recoil)
-    )
-    neutrino_rate = total_activity*sum(
+    ])
+    neutrino_rate = total_activity*sum(Float64[
         emission.representative_energy_eV*emission.yield_per_decay
         for emission in scheme.emissions if emission.species == :neutrino
-    )
+    ])
     unresolved_rate = total_activity*scheme.unresolved_energy_eV_per_decay
     residual = q_rate-em_rate-non_em_rate-neutrino_rate-unresolved_rate
     isapprox(

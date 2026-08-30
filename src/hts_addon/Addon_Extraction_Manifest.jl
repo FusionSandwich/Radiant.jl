@@ -87,7 +87,7 @@ end
 
 function _present_hts_addon_julia_files()
     return sort(String[
-        joinpath("src","hts_addon",name)
+        string("src/hts_addon/",name)
         for name in readdir(@__DIR__)
         if endswith(name,".jl")
     ])
