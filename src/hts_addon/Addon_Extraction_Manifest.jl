@@ -245,9 +245,11 @@ function default_hts_addon_extraction_manifest()
             [
                 "src/hts_addon/Material_Response_Registry.jl",
                 "src/hts_addon/Response_Table_Completion.jl",
+                "src/hts_addon/Material_Data_Bindings.jl",
             ];
             core_dependencies=["Cryogenic_Electrothermal","Atomistic response tables"],
             status=:ready_to_extract,
+            notes="Material_Data_Bindings uses the current Atomistic_Response_Table and vector-registry APIs; YBCO-to-GdBCO substitution remains prohibited without explicit surrogate uncertainty.",
         ),
         HTS_Addon_Component(
             :atomistic_response_tables,
