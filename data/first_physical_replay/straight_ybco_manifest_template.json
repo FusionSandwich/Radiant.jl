@@ -1,0 +1,106 @@
+{
+  "schema": "radiant.hts.first_physical_replay_manifest/v1",
+  "case_id": "straight-ybco-first-physical-replay",
+  "material_family": "YBCO",
+  "classification": "physical-candidate",
+  "runtime_pins": {
+    "radiant_git_sha": "0000000000000000000000000000000000000000",
+    "opensn_git_sha": "0000000000000000000000000000000000000000",
+    "openmc_version": "0.16.0",
+    "julia_version": "1.10.12",
+    "python_version": "3.12"
+  },
+  "normalization": {
+    "source_rate_per_s": 1.0,
+    "symmetry_factor": 1.0,
+    "source_basis": "per_source_history",
+    "normalization_hash": "BOUND_NORMALIZATION_HASH"
+  },
+  "ownership": {
+    "one_additive_owner_per_population_response": true,
+    "comparison_responses_excluded_from_production_sum": true,
+    "prompt_delayed_separation": true
+  },
+  "protected_responses": [
+    "energy_balance",
+    "interface_incoming_current",
+    "interface_outgoing_current",
+    "layer_prompt_lattice_heat",
+    "layer_scalar_flux",
+    "layer_total_deposition",
+    "particle_balance",
+    "peak_sublayer_deposition"
+  ],
+  "required_convergence_axes": [
+    "source_bank",
+    "spatial",
+    "angular",
+    "energy"
+  ],
+  "artifacts": {
+    "openmc_boundary_source": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/openmc_boundary_source.h5",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "radiant.boundary_angular_current/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    },
+    "openmc_reference_bundle": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/openmc_reference_bundle.h5",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "radiant.hts.physical_reference_bundle/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    },
+    "local_geometry": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/local_faceted_geometry.h5",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "radiant.faceted_surface_mesh/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    },
+    "neutron_multigroup_data": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/neutron_multigroup_data.h5",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "radiant.hts.multigroup_neutron/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    },
+    "photon_multigroup_data": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/photon_multigroup_data.h5",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "radiant.hts.multigroup_photon/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    },
+    "neutron_to_photon_data": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/neutron_to_photon_data.h5",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "radiant.hts.neutron_to_photon/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    },
+    "material_response_bundle": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/material_response_bundle.h5",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "radiant.hts.material_response_bundle/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    },
+    "transport_ownership_map": {
+      "path": "ABSOLUTE_EXTERNAL_PATH/transport_ownership_map.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "schema": "parastell_damage.transport_ownership_map/v1",
+      "classification": "physical-candidate",
+      "source_hash": "BOUND_SOURCE_HASH",
+      "geometry_hash": "BOUND_GEOMETRY_HASH"
+    }
+  }
+}
