@@ -115,6 +115,7 @@ function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
         "comparison-responses-excluded-from-production-sums",
         "all-hts-source-files-have-extraction-owners",
         "response-specific-group-condensation-preserved",
+        "activation-source-energy-separated-from-deposited-heat",
     )
     for invariant in required_invariants
         invariant in this.extraction_invariants || error(
@@ -166,6 +167,15 @@ function default_hts_addon_extraction_manifest()
             core_dependencies=["Process_Resolved_Scoring","Source_Normalization"],
             status=:ready_to_extract,
             notes="Separates deposition, heat, storage, escape, recoil/cutoff handoff, prompt/delayed populations, and comparison-only responses.",
+        ),
+        HTS_Addon_Component(
+            :activation_delayed_sources,
+            ["src/hts_addon/Activation_Delayed_Source.jl"];
+            core_dependencies=[
+                "Anisotropic_Volume_Source","Source_Normalization","Layer_Heating_Ledger",
+            ],
+            status=:ready_to_extract,
+            notes="Builds parent-resolved delayed photon/electron/positron sources and separate alpha, recoil, neutrino, and unresolved-energy handoffs from activity fields.",
         ),
         HTS_Addon_Component(
             :response_preserving_group_condensation,
@@ -303,6 +313,7 @@ function default_hts_addon_extraction_manifest()
             "comparison-responses-excluded-from-production-sums",
             "all-hts-source-files-have-extraction-owners",
             "response-specific-group-condensation-preserved",
+            "activation-source-energy-separated-from-deposited-heat",
         ],
         metadata=Dict(
             "hosting_policy" => "temporary-core-only",
@@ -313,6 +324,7 @@ function default_hts_addon_extraction_manifest()
             "gd_self_shielding_transport" => "analytic-screening-only",
             "heating_ownership" => "one-additive-owner-per-population-response",
             "group_condensation" => "response-and-reference-spectrum-specific",
+            "activation_delayed_sources" => "parent-resolved-and-energy-ledger-separated",
         ),
     )
     validate_addon_extraction_manifest(manifest)
