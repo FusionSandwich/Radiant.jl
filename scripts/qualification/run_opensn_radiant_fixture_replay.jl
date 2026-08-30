@@ -61,7 +61,7 @@ function main()
     geometry.is_build = true
 
     boundary_conditions = Radiant.get_boundary_conditions(geometry)
-    boundary_conditions == ["void","void"] || error(
+    boundary_conditions == [0,0] || error(
         "Replay fixture boundary ordering is inconsistent with the Radiant 1-D sweep.",
     )
 
@@ -144,7 +144,7 @@ function main()
         "energy_group_map" => projection_receipt.energy_group_map,
         "direction_map" => projection_receipt.direction_map,
         "surface_index" => projection_receipt.surface_index,
-        "boundary_conditions" => boundary_conditions,
+        "boundary_conditions_encoded" => boundary_conditions,
         "physical_openmc_source" => false,
         "physical_opensn_solution" => false,
     )
