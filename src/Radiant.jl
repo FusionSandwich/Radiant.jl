@@ -93,7 +93,8 @@ module Radiant
         "Material_Response_Registry.jl",
         "Atomistic_Response_Table_Pipeline.jl",
         "Physical_Reference_Qualification.jl",
-        "OpenSn_Radiant_Closed_Coupling.jl"
+        "OpenSn_Radiant_Closed_Coupling.jl",
+        "Completion_Extensions.jl"
     ]
     for folder in [
         "structures/","tools/","cross_sections/","particle_transport/","interchange/",
