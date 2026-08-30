@@ -1,0 +1,283 @@
+schema = "radiant.hts.physics_reference_registry/v1"
+classification = "reference-and-method-basis"
+future_package = "RadiantHTS.jl"
+physical_gate_policy = "A reference supports a model choice but does not establish a numerical physical pass without hash-bound inputs, convergence, uncertainty, and matched responses."
+
+[[reference]]
+id = "openmc-mgxs-api"
+title = "OpenMC multigroup cross section API"
+organization = "OpenMC"
+url = "https://docs.openmc.org/en/stable/pythonapi/mgxs.html"
+reference_type = "official-documentation"
+used_for = [
+  "neutron and photon multigroup response definitions",
+  "scattering and reaction matrices",
+  "response-preserving energy-group condensation inputs",
+]
+implementation = [
+  "src/hts_addon/Response_Preserving_Group_Condensation.jl",
+  "src/hts_addon/Process_Resolved_Scoring.jl",
+]
+
+[[reference]]
+id = "openmc-mgxs-file-format"
+title = "OpenMC multigroup cross section library file format"
+organization = "OpenMC"
+url = "https://docs.openmc.org/en/stable/io_formats/mgxs_library.html"
+reference_type = "official-documentation"
+used_for = [
+  "distinguishing OpenMC runtime MGXS libraries from tally/post-processing HDF5 stores",
+  "group ordering, angular representation, and material identity contracts",
+]
+implementation = [
+  "src/interchange/source_hdf5.jl",
+  "src/hts_addon/Response_Preserving_Group_Condensation.jl",
+]
+
+[[reference]]
+id = "openmc-depletion"
+title = "OpenMC depletion and transport-independent depletion"
+organization = "OpenMC"
+url = "https://docs.openmc.org/en/stable/usersguide/depletion.html"
+reference_type = "official-documentation"
+used_for = [
+  "volume scalar-flux and microscopic-cross-section activation handoff",
+  "inventory and activity provenance",
+]
+implementation = [
+  "src/hts_addon/Activation_Delayed_Source.jl",
+]
+
+[[reference]]
+id = "openmc-decay-sources"
+title = "OpenMC decay photon sources and R2S workflow"
+organization = "OpenMC"
+url = "https://docs.openmc.org/en/stable/usersguide/decay_sources.html"
+reference_type = "official-documentation"
+used_for = [
+  "spatially resolved delayed photon-source reinjection",
+  "cooling-time and activation-region contracts",
+]
+implementation = [
+  "src/hts_addon/Activation_Delayed_Source.jl",
+]
+
+[[reference]]
+id = "opensn"
+title = "OpenSn linear Boltzmann transport solver"
+organization = "OpenSn"
+url = "https://open-sn.github.io/opensn/"
+repository = "https://github.com/Open-Sn/opensn"
+reference_type = "official-documentation-and-source"
+used_for = [
+  "local neutron and photon deterministic transport",
+  "curved and unstructured neutral-transport reference",
+  "OpenSn-Radiant surface and volume coupling",
+]
+implementation = [
+  "src/hts_addon/OpenSn_Radiant_Closed_Coupling.jl",
+  "src/hts_addon/Physical_Reference_Qualification.jl",
+]
+
+[[reference]]
+id = "dagmc"
+title = "DAGMC faceted CAD geometry for Monte Carlo radiation transport"
+organization = "DAGMC"
+url = "https://svalinn.github.io/DAGMC/"
+repository = "https://github.com/svalinn/DAGMC"
+reference_type = "official-documentation-and-source"
+used_for = [
+  "DAGMC/MOAB facet extraction",
+  "watertight and manifold CAD contracts",
+  "ParaStell-derived tape and magnet microdomains",
+]
+implementation = [
+  "src/hts_addon/Faceted_Geometry.jl",
+  "src/hts_addon/Faceted_Local_Tape_Domain.jl",
+  "scripts/geometry/export_dagmc_facets.py",
+]
+
+[[reference]]
+id = "parastell"
+title = "ParaStell stellarator neutronics geometry workflow"
+organization = "Svalinn"
+repository = "https://github.com/svalinn/parastell"
+reference_type = "source-repository"
+used_for = [
+  "global stellarator geometry lineage",
+  "surface-facet and local tape-domain generation",
+]
+implementation = [
+  "src/hts_addon/Faceted_Geometry.jl",
+]
+
+[[reference]]
+id = "gd-capture-gamma-measurement"
+title = "Measurement of gamma-ray spectra from thermal neutron capture on gadolinium"
+authors = "Hagiwara et al."
+doi = "10.1093/ptep/ptz002"
+url = "https://arxiv.org/abs/1907.00788"
+reference_type = "peer-reviewed-primary-research"
+used_for = [
+  "Gd-155 and Gd-157 prompt capture gamma spectra",
+  "capture-cascade validation targets",
+]
+implementation = [
+  "src/hts_addon/Gd_Prompt_Capture_Cascade.jl",
+  "src/hts_addon/Gd_Evaluated_Cascade_Adapter.jl",
+]
+
+[[reference]]
+id = "iaea-pgaa"
+title = "Database of prompt gamma rays from slow neutron capture for elemental analysis"
+organization = "International Atomic Energy Agency"
+url = "https://www-nds.iaea.org/pgaa/"
+reference_type = "evaluated-data-resource"
+used_for = [
+  "isotope-resolved prompt gamma line identities and intensities",
+  "cross-checking Gd capture emission data",
+]
+implementation = [
+  "src/hts_addon/Gd_Evaluated_Cascade_Adapter.jl",
+]
+
+[[reference]]
+id = "geant4-photon-evaporation"
+title = "Geant4 photon evaporation and nuclear de-excitation model"
+organization = "Geant4"
+url = "https://geant4.web.cern.ch/documentation/dev/prm_html/PhysicsReferenceManual/hadronic/PhotonEvaporation/PhotonEvaporation.html"
+reference_type = "official-documentation"
+priority = "supporting-reference-not-current-critical-path"
+used_for = [
+  "independent generation or checking of conversion-electron and nuclear de-excitation cascades",
+]
+implementation = [
+  "src/hts_addon/Gd_Evaluated_Cascade_Adapter.jl",
+]
+
+[[reference]]
+id = "geant4-atomic-relaxation"
+title = "Geant4 atomic relaxation model"
+organization = "Geant4"
+url = "https://geant4.web.cern.ch/documentation/dev/prm_html/PhysicsReferenceManual/electromagnetic/atomic_relaxation/relaxation.html"
+reference_type = "official-documentation"
+priority = "supporting-reference-not-current-critical-path"
+used_for = [
+  "fluorescence x-ray and Auger-electron cascade cross-checks",
+]
+implementation = [
+  "src/hts_addon/Gd_Evaluated_Cascade_Adapter.jl",
+]
+
+[[reference]]
+id = "endf-decay-data"
+title = "ENDF-6 decay-data sublibrary conventions"
+organization = "NNDC"
+url = "https://www.nndc.bnl.gov/endfdocs/ENDF-102-2023.pdf"
+reference_type = "evaluated-data-format"
+used_for = [
+  "parent/daughter decay identity",
+  "decay mode, Q value, spectra, and uncertainty provenance",
+]
+implementation = [
+  "src/hts_addon/Activation_Delayed_Source.jl",
+]
+
+[[reference]]
+id = "jcgm-100"
+title = "Evaluation of measurement data — Guide to the expression of uncertainty in measurement"
+organization = "Joint Committee for Guides in Metrology / BIPM"
+url = "https://www.bipm.org/documents/20126/2071204/JCGM_100_2008_E.pdf"
+reference_type = "international-guide"
+used_for = [
+  "standard-uncertainty representation",
+  "covariance and correlated-component accounting",
+]
+implementation = [
+  "src/hts_addon/Response_Uncertainty_And_Convergence.jl",
+  "src/hts_addon/Response_Preserving_Group_Condensation.jl",
+]
+
+[[reference]]
+id = "jcgm-101"
+title = "Propagation of distributions using a Monte Carlo method"
+organization = "Joint Committee for Guides in Metrology / BIPM"
+url = "https://www.bipm.org/documents/20126/2071204/JCGM_101_2008_E.pdf"
+reference_type = "international-guide"
+used_for = [
+  "nonlinear uncertainty propagation and future model-ensemble sampling",
+]
+implementation = [
+  "src/hts_addon/Response_Uncertainty_And_Convergence.jl",
+  "src/hts_addon/Statistical_Microdosimetry.jl",
+]
+
+[[reference]]
+id = "nist-cryogenic-materials"
+title = "Cryogenic material properties"
+organization = "NIST"
+url = "https://trc.nist.gov/cryogenics/materials/materialproperties.htm"
+reference_type = "official-evaluated-property-resource"
+used_for = [
+  "copper, insulation, and structural cryogenic thermal properties",
+]
+implementation = [
+  "src/hts_addon/Material_Response_Registry.jl",
+  "src/hts_addon/Material_Data_Bindings.jl",
+  "src/hts_addon/Cryogenic_Electrothermal.jl",
+]
+
+[[reference]]
+id = "phonopy"
+title = "Phonopy phonon and harmonic thermal-property calculations"
+organization = "Phonopy project"
+url = "https://phonopy.github.io/phonopy/"
+reference_type = "official-documentation-and-source"
+used_for = [
+  "YBCO/GdBCO harmonic heat capacity and phonon response tables",
+]
+implementation = [
+  "src/hts_addon/Atomistic_Response_Table_Pipeline.jl",
+  "src/hts_addon/Material_Data_Bindings.jl",
+]
+
+[[reference]]
+id = "phono3py"
+title = "Phono3py lattice thermal conductivity and phonon lifetime calculations"
+organization = "Phono3py project"
+url = "https://phonopy.github.io/phono3py/"
+reference_type = "official-documentation-and-source"
+used_for = [
+  "anisotropic thermal-conductivity and phonon-lifetime response tables",
+]
+implementation = [
+  "src/hts_addon/Atomistic_Response_Table_Pipeline.jl",
+]
+
+[[reference]]
+id = "lammps-green-kubo"
+title = "LAMMPS thermal conductivity calculations"
+organization = "LAMMPS"
+url = "https://docs.lammps.org/Howto_kappa.html"
+reference_type = "official-documentation"
+used_for = [
+  "independent Green-Kubo thermal-conductivity estimates with MLIP/MD replicas",
+]
+implementation = [
+  "src/hts_addon/Response_Table_Completion.jl",
+  "src/hts_addon/Material_Data_Bindings.jl",
+]
+
+[[reference]]
+id = "epw"
+title = "EPW electron-phonon calculations"
+organization = "EPW project"
+url = "https://docs.epw-code.org/"
+reference_type = "official-documentation-and-source"
+used_for = [
+  "electron-phonon spectral functions and non-equilibrium relaxation inputs",
+]
+implementation = [
+  "src/hts_addon/Atomistic_Response_Table_Pipeline.jl",
+  "src/hts_addon/SubkeV_Thermalization.jl",
+]
