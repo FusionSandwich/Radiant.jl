@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: hts-addon-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -45,6 +45,8 @@ jobs:
         run: julia --startup-file=no --project=. test/hts_faceted_local_domain_tests.jl
       - name: Run analytic curvature and grazing tests
         run: julia --startup-file=no --project=. test/hts_curvature_math_tests.jl
+      - name: Run three-level curvature convergence tests
+        run: julia --startup-file=no --project=. test/hts_curvature_convergence_tests.jl
       - name: Run evaluated Gd cascade tests
         run: julia --startup-file=no --project=. test/hts_gd_evaluated_tests.jl
       - name: Run HTS material response-table tests
@@ -55,7 +57,7 @@ jobs:
         run: |
           mkdir -p artifacts/hts-addon
           {
-            echo 'schema = "radiant.hts_addon_test_receipt/v5"'
+            echo 'schema = "radiant.hts_addon_test_receipt/v6"'
             echo 'branch_policy = "branch-only-no-pr"'
             echo 'future_package = "RadiantHTS.jl"'
             echo 'julia_version = "${{ matrix.julia-version }}"'
@@ -65,6 +67,7 @@ jobs:
             echo 'faceted_geometry_tested = true'
             echo 'faceted_local_domain_tested = true'
             echo 'analytic_curvature_heating_tested = true'
+            echo 'curvature_convergence_contract_tested = true'
             echo 'complete_evaluated_gd_adapter_tested = true'
             echo 'material_registry_tested = true'
             echo 'atomistic_table_pipeline_tested = true'
