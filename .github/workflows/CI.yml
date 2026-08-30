@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') || startsWith(github.ref, 'refs/heads/codex/') }}
 
 jobs:
   qualification:
