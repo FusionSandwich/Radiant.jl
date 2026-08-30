@@ -276,9 +276,8 @@ function condense_transfer_matrix(
     coarse_flux = condense_group_integrals(incoming_mapping,flux)
     coarse_outgoing = vec(transpose(coarse_flux)*coarse_matrix)
     residual = coarse_outgoing-aggregated_fine
-    relative = abs.(residual)./max.(
-        abs.(coarse_outgoing),abs.(aggregated_fine),eps(Float64),
-    )
+    scale = max.(max.(abs.(coarse_outgoing),abs.(aggregated_fine)),eps(Float64))
+    relative = abs.(residual)./scale
     isapprox(coarse_outgoing,aggregated_fine;rtol=closure_rtol,atol=closure_atol) || error(
         "Transfer-matrix condensation failed outgoing-source closure for $(response_id).",
     )
