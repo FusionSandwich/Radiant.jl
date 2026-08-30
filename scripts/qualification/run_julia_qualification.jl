@@ -76,7 +76,7 @@ function main()
     cd(ROOT)
     mkpath(RESULT_ROOT)
     receipt = Dict{String,Any}(
-        "schema" => "radiant.julia_qualification/v5",
+        "schema" => "radiant.julia_qualification/v6",
         "overall_status" => "RUNNING",
         "started_at" => string(Dates.now()),
         "repository_root" => ROOT,
@@ -104,6 +104,7 @@ function main()
             "MATERIAL_RESPONSE_REGISTRY_PASS" => false,
             "ATOMISTIC_RESPONSE_PIPELINE_PASS" => false,
             "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS" => false,
+            "PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS" => false,
             "CLOSED_COUPLING_SOFTWARE_PASS" => false,
             "RADIANT_EM_ANALYTIC_PASS" => false,
             "HTS_HEATING_CHAIN_ANALYTIC_PASS" => false,
@@ -148,6 +149,7 @@ function main()
         ("hts_curvature_convergence_tests","hts_curvature_convergence_tests.jl"),
         ("hts_gd_evaluated_tests","hts_gd_evaluated_tests.jl"),
         ("hts_response_table_completion_tests","hts_response_table_completion_tests.jl"),
+        ("hts_physical_reference_bundle_tests","hts_physical_reference_bundle_tests.jl"),
     )
     for (step_name,test_file) in test_matrix
         run_step!(receipt,step_name) do
@@ -160,7 +162,7 @@ function main()
         "CURVATURE_HEATING_ANALYTIC_PASS","CURVATURE_CONVERGENCE_SOFTWARE_PASS",
         "EVALUATED_GD_ADAPTER_SOFTWARE_PASS","MATERIAL_RESPONSE_REGISTRY_PASS",
         "ATOMISTIC_RESPONSE_PIPELINE_PASS","MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS",
-        "CLOSED_COUPLING_SOFTWARE_PASS",
+        "PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
     )
         receipt["gates"][gate] = true
     end
