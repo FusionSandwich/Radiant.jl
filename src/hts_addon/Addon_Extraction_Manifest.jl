@@ -93,11 +93,6 @@ function _present_hts_addon_julia_files()
     ])
 end
 
-"""
-Validate both policy invariants and extraction completeness. Every Julia source file currently
-stored under `src/hts_addon` must have exactly one component owner, including the temporary loader
-and manifest itself. This prevents implemented capabilities from becoming untested orphan files.
-"""
 function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
     for component in this.components
         for path in component.files
@@ -119,6 +114,7 @@ function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
         "future-addon-extraction-preserved",
         "comparison-responses-excluded-from-production-sums",
         "all-hts-source-files-have-extraction-owners",
+        "response-specific-group-condensation-preserved",
     )
     for invariant in required_invariants
         invariant in this.extraction_invariants || error(
@@ -170,6 +166,13 @@ function default_hts_addon_extraction_manifest()
             core_dependencies=["Process_Resolved_Scoring","Source_Normalization"],
             status=:ready_to_extract,
             notes="Separates deposition, heat, storage, escape, recoil/cutoff handoff, prompt/delayed populations, and comparison-only responses.",
+        ),
+        HTS_Addon_Component(
+            :response_preserving_group_condensation,
+            ["src/hts_addon/Response_Preserving_Group_Condensation.jl"];
+            core_dependencies=["SHA","multigroup energy/source conventions"],
+            status=:ready_to_extract,
+            notes="Creates separate spectrum-weighted condensation receipts for heating, Gd capture, activation, PKA, and neutron-to-photon transfer responses.",
         ),
         HTS_Addon_Component(
             :spatial_field_maps,
@@ -297,6 +300,7 @@ function default_hts_addon_extraction_manifest()
             "future-addon-extraction-preserved",
             "comparison-responses-excluded-from-production-sums",
             "all-hts-source-files-have-extraction-owners",
+            "response-specific-group-condensation-preserved",
         ],
         metadata=Dict(
             "hosting_policy" => "temporary-core-only",
@@ -306,6 +310,7 @@ function default_hts_addon_extraction_manifest()
             "spatial_field_transport" => "cell-local-within-one-sn-sweep",
             "gd_self_shielding_transport" => "analytic-screening-only",
             "heating_ownership" => "one-additive-owner-per-population-response",
+            "group_condensation" => "response-and-reference-spectrum-specific",
         ),
     )
     validate_addon_extraction_manifest(manifest)
