@@ -18,10 +18,13 @@ normal = [-1.0, 0.0, 0.0]
 tangent_1 = [0.0, 1.0, 0.0]
 tangent_2 = [0.0, 0.0, -1.0]
 
+# Radiant stores three-component unit directions even for a 1-D solve. The x component is the
+# physical transport cosine; the deterministic positive y component is only the documented 1-D
+# embedding and carries no azimuthal interpretation.
 [[direction]]
-cosines = [-0.5773502691896257, 0.0, 0.0]
+cosines = [-0.5773502691896257, 0.816496580927726, 0.0]
 angular_flux = [0.0]
 
 [[direction]]
-cosines = [0.5773502691896257, 0.0, 0.0]
+cosines = [0.5773502691896257, 0.816496580927726, 0.0]
 angular_flux = [2.0]
