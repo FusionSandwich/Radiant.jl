@@ -41,13 +41,17 @@ jobs:
         run: julia --startup-file=no --project=. test/hts_addon_tests.jl
       - name: Run production-foundation regression tests
         run: julia --startup-file=no --project=. test/hts_production_foundations_tests.jl
+      - name: Run faceted local-domain tests
+        run: julia --startup-file=no --project=. test/hts_faceted_local_domain_tests.jl
+      - name: Run analytic curvature and grazing tests
+        run: julia --startup-file=no --project=. test/hts_curvature_math_tests.jl
       - name: Record branch-only qualification
         if: always()
         shell: bash
         run: |
           mkdir -p artifacts/hts-addon
           {
-            echo 'schema = "radiant.hts_addon_test_receipt/v2"'
+            echo 'schema = "radiant.hts_addon_test_receipt/v3"'
             echo 'branch_policy = "branch-only-no-pr"'
             echo 'future_package = "RadiantHTS.jl"'
             echo 'julia_version = "${{ matrix.julia-version }}"'
@@ -55,6 +59,8 @@ jobs:
             echo 'workflow_status = "${{ job.status }}"'
             echo 'spatial_field_operator_tested = true'
             echo 'faceted_geometry_tested = true'
+            echo 'faceted_local_domain_tested = true'
+            echo 'analytic_curvature_heating_tested = true'
             echo 'material_registry_tested = true'
             echo 'atomistic_table_pipeline_tested = true'
             echo 'physical_reference_contract_tested = true'
@@ -62,6 +68,7 @@ jobs:
             echo 'closed_coupling_algorithm_tested = true'
             echo 'physical_openmc_replay_pass = false'
             echo 'physical_opensn_replay_pass = false'
+            echo 'physical_curved_transport_pass = false'
           } > artifacts/hts-addon/receipt-julia-${{ matrix.julia-version }}.toml
       - name: Upload add-on qualification receipt
         if: always()
