@@ -1,6 +1,7 @@
 using Radiant
 using Test
 using LinearAlgebra
+using HDF5
 
 function _process_scoring_fixture()
     particle = Photon()
@@ -227,6 +228,98 @@ end
     @test weighted_deposited_energy_mean(events) > 0.0
     @test weighted_deposited_energy_variance(events) ≥ 0.0
     @test expected_specific_energy_Gy(events,1.0e-9) > 0.0
+end
+
+@testset "Directional and parent-correlated microdosimetry events" begin
+    fractions = synthetic_microdosimetry_kernel_fixture().prototypes[1].partition_fractions
+    parent_correlated = Correlated_Secondary(
+        "electron",25.0;
+        direction_model=:parent_correlated,
+        correlation_id="physical-event-1",
+    )
+    prototype = Microdosimetry_Event_Prototype(
+        prototype_id="fixed-parent",
+        particle_tag="photon",
+        process_id="compton",
+        material_tag="YBCO",
+        layer_id="REBCO",
+        position_cm=[0.0,0.0,0.0],
+        direction_model=:fixed,
+        fixed_direction=[0.0,1.0,0.0],
+        incident_energy_eV=1000.0,
+        mean_deposited_energy_eV=100.0,
+        event_rate_per_s=2.0,
+        partition_fractions=fractions,
+        correlated_secondaries=[parent_correlated],
+        correlation_id="physical-event-1",
+    )
+    kernel = Microdosimetry_Kernel(
+        [prototype];
+        source_artifact_hash="source-direction-fixture",
+        geometry_hash="geometry-direction-fixture",
+        material_state_hash="material-direction-fixture",
+    )
+    events = sample_microdosimetry_events(kernel,4;seed=4)
+    @test all(event.direction == (0.0,1.0,0.0) for event in events)
+    @test all(event.correlated_secondaries[1].direction == event.direction for event in events)
+    @test all(
+        event.correlated_secondaries[1].correlation_id == event.correlation_id
+        for event in events
+    )
+    @test all(
+        isapprox(sum(abs2,event.correlated_secondaries[1].direction),1.0;atol=1.0e-12)
+        for event in events
+    )
+
+    tabulated = Microdosimetry_Event_Prototype(
+        prototype_id="joint-energy-angle",
+        particle_tag="electron",
+        process_id="elastic-nuclear-recoil",
+        material_tag="YBCO",
+        layer_id="REBCO",
+        position_cm=[0.0,0.0,0.0],
+        direction_model=:joint_energy_angle,
+        direction_support=[[1.0,0.0,0.0],[0.0,0.0,1.0]],
+        direction_probabilities=[1.0,0.0],
+        joint_energy_support_eV=[800.0,1200.0],
+        incident_energy_eV=1000.0,
+        mean_deposited_energy_eV=100.0,
+        event_rate_per_s=1.0,
+        partition_fractions=fractions,
+    )
+    joint_kernel = Microdosimetry_Kernel(
+        [tabulated];source_artifact_hash="source-joint-fixture",
+        geometry_hash="geometry-joint-fixture",material_state_hash="material-joint-fixture",
+    )
+    joint_events = sample_microdosimetry_events(joint_kernel,3;seed=8)
+    @test all(event.direction == (1.0,0.0,0.0) for event in joint_events)
+    @test all(event.incident_energy_eV == 800.0 for event in joint_events)
+
+    mktempdir() do directory
+        path = joinpath(directory,"weighted-event-bank.h5")
+        write_weighted_microdosimetry_event_bank_hdf5(
+            path,events;source_hash="source-direction-fixture",kernel_hash="kernel-fixture",
+        )
+        h5open(path,"r") do handle
+            @test read(attributes(handle)["schema_id"]) ==
+                  "radiant.hts.weighted_microdosimetry_event_bank/v2"
+            @test read(attributes(handle)["representative_not_analog"]) == 1
+            @test read(handle["events/direction"])[:,1] == [0.0,1.0,0.0]
+            @test read(handle["secondaries/direction"])[:,1] == [0.0,1.0,0.0]
+            @test read(handle["secondaries/parent_event_index_1based"]) == [1,2,3,4]
+        end
+    end
+
+    @test_throws ErrorException Correlated_Secondary(
+        "electron",1.0;direction_model=:parent_correlated,
+    )
+    @test_throws ErrorException Microdosimetry_Event_Prototype(
+        prototype_id="missing-angular",particle_tag="electron",process_id="elastic",
+        material_tag="YBCO",layer_id="REBCO",position_cm=[0.0,0.0,0.0],
+        direction_model=:tabulated_angular,incident_energy_eV=10.0,
+        mean_deposited_energy_eV=1.0,event_rate_per_s=1.0,
+        partition_fractions=fractions,
+    )
 end
 
 @testset "Cryogenic electrothermal coupling" begin

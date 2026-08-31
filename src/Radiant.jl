@@ -205,12 +205,15 @@ module Radiant
     export non_equilibrium_release,non_equilibrium_power,subkev_model_is_production_ready
     export synthetic_subkev_kernel_fixture
 
-    export Event_Energy_Partition_Fractions,Correlated_Secondary,Energy_Straggling_Model
+    export Event_Energy_Partition_Fractions,Correlated_Secondary,Sampled_Correlated_Secondary
+    export Energy_Straggling_Model,MICRODOSIMETRY_DIRECTION_MODELS
     export Microdosimetry_Event_Prototype,Microdosimetry_Kernel
     export Weighted_Microdosimetry_Event,energy_partition_from_fractions
     export sample_microdosimetry_events,microdosimetry_effective_sample_size
     export weighted_deposited_energy_mean,weighted_deposited_energy_variance
     export detector_trigger_probability,expected_specific_energy_Gy
+    export WEIGHTED_MICRODOSIMETRY_EVENT_BANK_HDF5_SCHEMA
+    export write_weighted_microdosimetry_event_bank_hdf5
     export synthetic_microdosimetry_kernel_fixture
 
     export Tabulated_Cryogenic_Property,constant_cryogenic_property,property_value

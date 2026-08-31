@@ -323,6 +323,7 @@ function default_hts_addon_extraction_manifest()
             "response-specific-group-condensation-preserved",
             "activation-source-energy-separated-from-deposited-heat",
             "protected-response-uncertainty-and-multi-axis-convergence-preserved",
+            "actual-sampled-parent-and-secondary-direction-vectors-preserved",
         ],
         metadata=Dict(
             "hosting_policy" => "temporary-core-only",
