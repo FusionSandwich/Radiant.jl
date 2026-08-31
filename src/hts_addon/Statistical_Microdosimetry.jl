@@ -133,7 +133,7 @@ struct Correlated_Secondary
     function Correlated_Secondary(
         particle_tag::AbstractString,
         kinetic_energy_eV::Real;
-        direction_model::Symbol=:isotropic,
+        direction_model::Symbol=:missing,
         correlation_id::AbstractString="uncorrelated",
         metadata::AbstractDict=Dict{String,String}(),
         fixed_direction::AbstractVector{<:Real}=[1.0,0.0,0.0],
@@ -227,7 +227,7 @@ struct Microdosimetry_Event_Prototype
         material_tag::AbstractString,
         layer_id::AbstractString,
         position_cm::AbstractVector{<:Real},
-        direction_model::Symbol=:isotropic,
+        direction_model::Symbol=:missing,
         fixed_direction::AbstractVector{<:Real}=[1.0,0.0,0.0],
         direction_support::AbstractVector=NTuple{3,Float64}[],
         direction_probabilities::AbstractVector{<:Real}=Float64[],
@@ -270,12 +270,23 @@ struct Microdosimetry_Event_Prototype
         for (key,value) in provenance
             provenance_string[string(key)] = string(value)
         end
+        correlation = String(correlation_id)
+        for secondary in correlated_secondaries
+            if secondary.direction_model == :parent_correlated
+                correlation == "uncorrelated" && error(
+                    "A prototype with parent-correlated secondaries requires an explicit correlation identifier.",
+                )
+                secondary.correlation_id == correlation || error(
+                    "Parent-correlated secondary and parent correlation identifiers must match.",
+                )
+            end
+        end
         return new(
             String(prototype_id),String(particle_tag),String(process_id),String(material_tag),
             String(layer_id),(position[1],position[2],position[3]),direction_model,
             direction,support,weights,energies,incident,deposited,rate,straggling,
             partition_fractions,Correlated_Secondary[correlated_secondaries...],
-            String(correlation_id),provenance_string,
+            correlation,provenance_string,
         )
     end
 end
@@ -341,6 +352,7 @@ struct Weighted_Microdosimetry_Event
     time_s::Float64
     position_cm::NTuple{3,Float64}
     direction::NTuple{3,Float64}
+    direction_model::Symbol
     incident_energy_eV::Float64
     deposited_energy_eV::Float64
     partition::Energy_Partition
@@ -512,7 +524,8 @@ function sample_microdosimetry_events(
         push!(output,Weighted_Microdosimetry_Event(
             Int64(sample_id),prototype.prototype_id,prototype.particle_tag,
             prototype.process_id,prototype.material_tag,prototype.layer_id,event_time,
-            prototype.position_cm,direction,sampled_incident,deposited,partition,
+            prototype.position_cm,direction,prototype.direction_model,
+            sampled_incident,deposited,partition,
             event_weight,sampled_secondaries,prototype.correlation_id,
             merge(
                 copy(prototype.provenance),
@@ -586,6 +599,11 @@ end
 const WEIGHTED_MICRODOSIMETRY_EVENT_BANK_HDF5_SCHEMA =
     "radiant.hts.weighted_microdosimetry_event_bank/v2"
 
+function _require_sha256_hex(value::AbstractString,label::AbstractString)
+    occursin(r"^[0-9a-fA-F]{64}$",value) || error("$(label) must be a SHA-256 digest.")
+    return lowercase(String(value))
+end
+
 """
     write_weighted_microdosimetry_event_bank_hdf5(path, events; source_hash, kernel_hash)
 
@@ -599,14 +617,14 @@ function write_weighted_microdosimetry_event_bank_hdf5(
     kernel_hash::AbstractString,
 )
     isempty(events) && error("Weighted microdosimetry HDF5 bank cannot be empty.")
-    isempty(source_hash) && error("Weighted event bank source hash cannot be empty.")
-    isempty(kernel_hash) && error("Weighted event bank kernel hash cannot be empty.")
+    source_digest = _require_sha256_hex(source_hash,"Weighted event bank source hash")
+    kernel_digest = _require_sha256_hex(kernel_hash,"Weighted event bank kernel hash")
     mkpath(dirname(abspath(path)))
     HDF5.h5open(path,"w") do handle
         HDF5.attributes(handle)["schema_id"] = WEIGHTED_MICRODOSIMETRY_EVENT_BANK_HDF5_SCHEMA
         HDF5.attributes(handle)["representative_not_analog"] = true
-        HDF5.attributes(handle)["source_hash"] = String(source_hash)
-        HDF5.attributes(handle)["kernel_hash"] = String(kernel_hash)
+        HDF5.attributes(handle)["source_hash"] = source_digest
+        HDF5.attributes(handle)["kernel_hash"] = kernel_digest
         count = length(events)
         event_group = HDF5.create_group(handle,"events")
         partition_group = HDF5.create_group(event_group,"partition")
@@ -615,11 +633,13 @@ function write_weighted_microdosimetry_event_bank_hdf5(
         event_group["prototype_id"] = getfield.(events,:prototype_id)
         event_group["particle_tag"] = getfield.(events,:particle_tag)
         event_group["process_id"] = getfield.(events,:process_id)
+        event_group["material_tag"] = getfield.(events,:material_tag)
         event_group["layer_id"] = getfield.(events,:layer_id)
         event_group["correlation_id"] = getfield.(events,:correlation_id)
         event_group["time_s"] = getfield.(events,:time_s)
         event_group["position_cm"] = reduce(hcat,collect.(getfield.(events,:position_cm)))
         event_group["direction"] = reduce(hcat,collect.(getfield.(events,:direction)))
+        event_group["direction_model"] = String.(getfield.(events,:direction_model))
         event_group["incident_energy_eV"] = getfield.(events,:incident_energy_eV)
         event_group["deposited_energy_eV"] = getfield.(events,:deposited_energy_eV)
         event_group["statistical_weight_events"] = getfield.(events,:statistical_weight_events)
@@ -693,6 +713,7 @@ function synthetic_microdosimetry_kernel_fixture()
         correlated_secondaries=[
             Correlated_Secondary(
                 "photon",50.0;
+                direction_model=:isotropic,
                 correlation_id="synthetic-bundle",
             ),
         ],

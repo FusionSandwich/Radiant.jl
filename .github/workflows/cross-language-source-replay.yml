@@ -38,6 +38,7 @@ jobs:
           python -m py_compile scripts/adapters/create_cross_language_source_fixture.py
           python -m py_compile scripts/references/create_physical_reference_fixture.py
           python -m py_compile scripts/references/build_physical_reference_bundle.py
+          python -m py_compile scripts/qualification/validate_microdosimetry_event_bank.py
       - name: Create Python HDF5 source fixtures
         run: python scripts/adapters/create_cross_language_source_fixture.py artifacts/cross-language-fixtures
       - name: Create Python physical-reference fixture inputs
@@ -66,6 +67,15 @@ jobs:
           julia --project=. scripts/qualification/validate_cross_language_physical_reference.jl
           artifacts/cross-language-reference/physical-reference.h5
           artifacts/cross-language-reference-replay-julia-${{ matrix.julia-version }}.toml
+      - name: Create Julia weighted microdosimetry event bank
+        run: >-
+          julia --project=. scripts/qualification/create_microdosimetry_event_bank_fixture.jl
+          artifacts/weighted-microdosimetry-event-bank-julia-${{ matrix.julia-version }}.h5
+      - name: Replay weighted microdosimetry event bank in Python
+        run: >-
+          python scripts/qualification/validate_microdosimetry_event_bank.py
+          artifacts/weighted-microdosimetry-event-bank-julia-${{ matrix.julia-version }}.h5
+          --receipt artifacts/weighted-microdosimetry-replay-julia-${{ matrix.julia-version }}.json
       - name: Upload replay evidence
         if: always()
         uses: actions/upload-artifact@v4

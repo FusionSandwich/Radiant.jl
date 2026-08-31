@@ -293,25 +293,73 @@ end
     )
     joint_events = sample_microdosimetry_events(joint_kernel,3;seed=8)
     @test all(event.direction == (1.0,0.0,0.0) for event in joint_events)
+    @test all(event.direction_model == :joint_energy_angle for event in joint_events)
     @test all(event.incident_energy_eV == 800.0 for event in joint_events)
+
+    tabulated_angular = Microdosimetry_Event_Prototype(
+        prototype_id="tabulated-angular",
+        particle_tag="photon",
+        process_id="rayleigh",
+        material_tag="YBCO",
+        layer_id="REBCO",
+        position_cm=[0.0,0.0,0.0],
+        direction_model=:tabulated_angular,
+        direction_support=[[1.0,0.0,0.0],[0.0,0.0,1.0]],
+        direction_probabilities=[0.0,1.0],
+        incident_energy_eV=1000.0,
+        mean_deposited_energy_eV=0.0,
+        event_rate_per_s=1.0,
+        partition_fractions=fractions,
+    )
+    angular_kernel = Microdosimetry_Kernel(
+        [tabulated_angular];source_artifact_hash="source-angular-fixture",
+        geometry_hash="geometry-angular-fixture",material_state_hash="material-angular-fixture",
+    )
+    angular_events = sample_microdosimetry_events(angular_kernel,3;seed=9)
+    @test all(event.direction == (0.0,0.0,1.0) for event in angular_events)
+    @test all(event.direction_model == :tabulated_angular for event in angular_events)
 
     mktempdir() do directory
         path = joinpath(directory,"weighted-event-bank.h5")
         write_weighted_microdosimetry_event_bank_hdf5(
-            path,events;source_hash="source-direction-fixture",kernel_hash="kernel-fixture",
+            path,events;source_hash=repeat("a",64),kernel_hash=repeat("b",64),
         )
         h5open(path,"r") do handle
             @test read(attributes(handle)["schema_id"]) ==
                   "radiant.hts.weighted_microdosimetry_event_bank/v2"
             @test read(attributes(handle)["representative_not_analog"]) == 1
             @test read(handle["events/direction"])[:,1] == [0.0,1.0,0.0]
+            @test read(handle["events/direction_model"])[1] == "fixed"
+            @test read(handle["events/material_tag"])[1] == "YBCO"
             @test read(handle["secondaries/direction"])[:,1] == [0.0,1.0,0.0]
             @test read(handle["secondaries/parent_event_index_1based"]) == [1,2,3,4]
         end
+        @test_throws ErrorException write_weighted_microdosimetry_event_bank_hdf5(
+            joinpath(directory,"invalid-lineage.h5"),events;
+            source_hash="not-a-digest",kernel_hash=repeat("b",64),
+        )
     end
 
     @test_throws ErrorException Correlated_Secondary(
         "electron",1.0;direction_model=:parent_correlated,
+    )
+    @test_throws ErrorException Correlated_Secondary("electron",1.0)
+    @test_throws ErrorException Microdosimetry_Event_Prototype(
+        prototype_id="implicit-angular",particle_tag="electron",process_id="elastic",
+        material_tag="YBCO",layer_id="REBCO",position_cm=[0.0,0.0,0.0],
+        incident_energy_eV=10.0,mean_deposited_energy_eV=1.0,event_rate_per_s=1.0,
+        partition_fractions=fractions,
+    )
+    mismatched_parent = Correlated_Secondary(
+        "electron",1.0;direction_model=:parent_correlated,correlation_id="secondary-event",
+    )
+    @test_throws ErrorException Microdosimetry_Event_Prototype(
+        prototype_id="mismatched-parent",particle_tag="photon",process_id="compton",
+        material_tag="YBCO",layer_id="REBCO",position_cm=[0.0,0.0,0.0],
+        direction_model=:fixed,fixed_direction=[1.0,0.0,0.0],incident_energy_eV=10.0,
+        mean_deposited_energy_eV=1.0,event_rate_per_s=1.0,
+        partition_fractions=fractions,correlated_secondaries=[mismatched_parent],
+        correlation_id="parent-event",
     )
     @test_throws ErrorException Microdosimetry_Event_Prototype(
         prototype_id="missing-angular",particle_tag="electron",process_id="elastic",
