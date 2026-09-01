@@ -215,6 +215,20 @@ function default_hts_addon_extraction_manifest()
             status=:ready_to_extract,
         ),
         HTS_Addon_Component(
+            :mapped_curvilinear_transport,
+            ["src/hts_addon/Mapped_Structured_Geometry.jl"];
+            core_dependencies=["Piecewise_Flat_Tape_Atlas","LinearAlgebra"],
+            status=:ready_to_extract,
+            notes="Caches mapped hexahedral metrics, conservative streaming, atlas transforms, multiscale layer coordinates, and manufactured performance comparisons; full collision transport and physical qualification are not claimed.",
+        ),
+        HTS_Addon_Component(
+            :charged_ion_transport_primitives,
+            ["src/hts_addon/Charged_Ion_Transport_Primitives.jl"];
+            core_dependencies=["Particle","Piecewise_Flat_Tape_Atlas"],
+            status=:ready_to_extract,
+            notes="Provides hash-bound species/source states and deterministic relativistic stopping, straggling, scattering, magnetic, and nonelastic-routing primitives without fabricating physical tables.",
+        ),
+        HTS_Addon_Component(
             :faceted_geometry,
             [
                 "src/hts_addon/Faceted_Geometry.jl",

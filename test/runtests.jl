@@ -412,4 +412,5 @@ end
     end
 
 end
+include("hts_mapped_ion_tests.jl")
 nothing

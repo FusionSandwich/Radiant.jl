@@ -82,6 +82,8 @@ module Radiant
         "Spatial_Magnetic_Field_Map.jl",
         "Spatial_Field_Transport.jl",
         "Piecewise_Flat_Tape_Atlas.jl",
+        "Mapped_Structured_Geometry.jl",
+        "Charged_Ion_Transport_Primitives.jl",
         "Analytic_Curvature_Benchmark.jl",
         "Faceted_Geometry.jl",
         "Faceted_Local_Tape_Domain.jl",
@@ -171,6 +173,25 @@ module Radiant
     export patch_to_global_coordinates,global_direction_to_patch,patch_direction_to_global
     export electromagnetic_field_for_patch,get_atlas_patch,get_atlas_patch_at_arc_length
     export atlas_refinement_report
+
+    export Mapped_Structured_Grid,build_mapped_structured_grid,mapped_grid_invariants
+    export assert_mapped_grid_invariants,mapped_cartesian_grid,mapped_cylindrical_grid
+    export mapped_toroidal_grid,mapped_helical_grid,mapped_frenet_grid,mapped_fibre_grid
+    export Atlas_Mapping_Cache,build_atlas_mapping_cache,atlas_global_to_local
+    export atlas_local_to_global,Conservative_Interface_Transfer
+    export conservative_interface_transfer,apply_interface_transfer
+    export Curved_Performance_Target,benchmark_curved_pipeline
+    export Multiscale_Local_Layer_Fixture,multiscale_local_layer_fixture
+    export local_layer_coordinate,physical_layer_coordinate
+    export Mapped_Streaming_Result,mapped_streaming_divergence,mapped_streaming_closure
+    export transform_polar_vector,transform_axial_vector
+
+    export RADIANT_MAX_ION_KINETIC_ENERGY_MEV,Ion_Species,proton_species,particle_from_ion
+    export Relativistic_Ion_Kinematics,relativistic_ion_kinematics
+    export Charged_Ion_Source_State,Tabulated_Ion_Transport_Model
+    export ion_transport_coefficients,Nonelastic_Secondary_Route
+    export Ion_Transport_Step_Result,magnetic_direction_step,ion_transport_step
+    export synthetic_proton_transport_fixture
 
     export Cylindrical_Shell_Path_Result,cylindrical_shell_critical_cosine
     export cylindrical_shell_path,pure_absorption_fraction
