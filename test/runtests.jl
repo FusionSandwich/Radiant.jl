@@ -413,4 +413,5 @@ end
 
 end
 include("hts_mapped_ion_tests.jl")
+include("hts_multi_rebco_tests.jl")
 nothing

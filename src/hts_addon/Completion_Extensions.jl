@@ -10,6 +10,7 @@ include(joinpath(@__DIR__,"Curvature_Convergence_Study.jl"))
 include(joinpath(@__DIR__,"Physical_Reference_Artifact.jl"))
 include(joinpath(@__DIR__,"Layer_Heating_Ledger.jl"))
 include(joinpath(@__DIR__,"Gd_Self_Shielding_Analytic.jl"))
+include(joinpath(@__DIR__,"Multi_REBCO_Family.jl"))
 include(joinpath(@__DIR__,"Response_Preserving_Group_Condensation.jl"))
 include(joinpath(@__DIR__,"Activation_Delayed_Source.jl"))
 include(joinpath(@__DIR__,"Response_Uncertainty_And_Convergence.jl"))
@@ -33,6 +34,17 @@ export Gd_Self_Shielding_Cell_Result,Gd_Groupwise_Self_Shielding_Result
 export macroscopic_capture_cm_inv,solve_gd_groupwise_self_shielding
 export gd_groupwise_self_shielding_factor,capture_rate_field_from_gd_self_shielding
 export gd_self_shielding_receipt
+
+export REBCO_MATERIAL_FAMILY_PACKET_SCHEMA,REBCO_COMPARISON_CONTRACT_SCHEMA
+export REBCO_SELF_SHIELDING_SCHEMA,REBCO_CONSUMER_BINDING_SCHEMA
+export REBCO_FAMILY_IDENTITIES
+export REBCO_Material_Family_Packet,validate_rebco_material_packet
+export adapt_rebco_material_packet,rebco_packet_is_physically_qualified
+export REBCO_Comparison_Contract,REBCO_Isotope_Capture_Component
+export REBCO_Self_Shielding_Case,REBCO_Self_Shielding_Axis_Result
+export solve_rebco_self_shielding_axis_sweep,rebco_self_shielding_receipt
+export rebco_self_shielding_is_physically_qualified
+export REBCO_Family_Consumer_Binding,bind_rebco_family_consumer
 
 export Energy_Group_Condensation_Map,fine_group_count,coarse_group_count
 export condense_group_integrals,response_condensation_weight_matrix

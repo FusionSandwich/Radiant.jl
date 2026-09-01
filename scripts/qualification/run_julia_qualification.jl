@@ -164,6 +164,7 @@ function main()
         ("hts_activation_delayed_source_tests","hts_activation_delayed_source_tests.jl"),
         ("hts_uncertainty_convergence_tests","hts_uncertainty_convergence_tests.jl"),
         ("hts_mapped_ion_tests","hts_mapped_ion_tests.jl"),
+        ("hts_multi_rebco_tests","hts_multi_rebco_tests.jl"),
     )
     for (step_name,test_file) in test_matrix
         run_step!(receipt,step_name) do
@@ -181,6 +182,7 @@ function main()
         "MATERIAL_RESPONSE_REGISTRY_PASS","ATOMISTIC_RESPONSE_PIPELINE_PASS",
         "MATERIAL_RESPONSE_COMPLETION_SOFTWARE_PASS","MATERIAL_DATA_BINDINGS_SOFTWARE_PASS",
         "PHYSICAL_REFERENCE_BUNDLE_SOFTWARE_PASS","CLOSED_COUPLING_SOFTWARE_PASS",
+        "MULTI_REBCO_FAMILY_SOFTWARE_PASS",
     )
         receipt["gates"][gate] = true
     end

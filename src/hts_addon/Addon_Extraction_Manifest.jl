@@ -117,6 +117,7 @@ function validate_addon_extraction_manifest(this::HTS_Addon_Extraction_Manifest)
         "response-specific-group-condensation-preserved",
         "activation-source-energy-separated-from-deposited-heat",
         "protected-response-uncertainty-and-multi-axis-convergence-preserved",
+        "rebco-family-identity-and-isotope-identity-preserved",
     )
     for invariant in required_invariants
         invariant in this.extraction_invariants || error(
@@ -242,6 +243,16 @@ function default_hts_addon_extraction_manifest()
             notes="DAGMC/ParaStell facets are validated and converted to conservative local Cartesian domains; direct unstructured SN transport is not claimed.",
         ),
         HTS_Addon_Component(
+            :multi_rebco_family_contracts,
+            ["src/hts_addon/Multi_REBCO_Family.jl"];
+            core_dependencies=[
+                "Gd_Self_Shielding_Analytic screening conventions",
+                "source/deposition/PKA/activation artifact contracts",
+            ],
+            status=:ready_to_extract,
+            notes="Validates Y/Gd/Eu/unresolved-Sa/confirmed-Sm family packets, separates controlled-substitution and realistic-product comparisons, and provides isotope-preserving analytic screening plus fail-closed consumer bindings.",
+        ),
+        HTS_Addon_Component(
             :gd_capture_and_self_shielding,
             [
                 "src/hts_addon/Gd_Prompt_Capture_Cascade.jl",
@@ -337,6 +348,7 @@ function default_hts_addon_extraction_manifest()
             "response-specific-group-condensation-preserved",
             "activation-source-energy-separated-from-deposited-heat",
             "protected-response-uncertainty-and-multi-axis-convergence-preserved",
+            "rebco-family-identity-and-isotope-identity-preserved",
             "actual-sampled-parent-and-secondary-direction-vectors-preserved",
         ],
         metadata=Dict(
@@ -350,6 +362,7 @@ function default_hts_addon_extraction_manifest()
             "group_condensation" => "response-and-reference-spectrum-specific",
             "activation_delayed_sources" => "parent-resolved-and-energy-ledger-separated",
             "uncertainty_and_convergence" => "response-specific-and-multi-axis",
+            "multi_rebco_physical_qualification" => "never-promoted-by-analytic-or-adapter-layer",
         ),
     )
     validate_addon_extraction_manifest(manifest)

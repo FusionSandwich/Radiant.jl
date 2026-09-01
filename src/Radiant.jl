@@ -219,6 +219,17 @@ module Radiant
     export gd_cascade_summary_is_production_ready,maurina_zenodo_gd_manifest
     export gd_cascade_data_sources
 
+    export REBCO_MATERIAL_FAMILY_PACKET_SCHEMA,REBCO_COMPARISON_CONTRACT_SCHEMA
+    export REBCO_SELF_SHIELDING_SCHEMA,REBCO_CONSUMER_BINDING_SCHEMA
+    export REBCO_FAMILY_IDENTITIES
+    export REBCO_Material_Family_Packet,validate_rebco_material_packet
+    export adapt_rebco_material_packet,rebco_packet_is_physically_qualified
+    export REBCO_Comparison_Contract,REBCO_Isotope_Capture_Component
+    export REBCO_Self_Shielding_Case,REBCO_Self_Shielding_Axis_Result
+    export solve_rebco_self_shielding_axis_sweep,rebco_self_shielding_receipt
+    export rebco_self_shielding_is_physically_qualified
+    export REBCO_Family_Consumer_Binding,bind_rebco_family_consumer
+
     export SubkeV_Thermalization_Kernel,SubkeV_Thermalization_Result
     export NonEquilibrium_Decay_Channel,NonEquilibrium_Thermalization_Model
     export subkev_partition_fractions,thermalize_subkev_event,get_non_equilibrium_energy
