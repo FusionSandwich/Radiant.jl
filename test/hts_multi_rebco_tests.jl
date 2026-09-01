@@ -165,3 +165,29 @@ end
     @test component.files == ["src/hts_addon/Multi_REBCO_Family.jl"]
     @test validate_addon_extraction_manifest(manifest)
 end
+
+@testset "Tier-A reference slab remains non-production" begin
+    gd = REBCO_Tier_A_Slab_Input(
+        "GdBCO",6.942420423104715,734.54,
+        Dict("Gd-155" => (0.1480,62200.0),"Gd-157" => (0.1565,239800.0)),
+        1.0,"75973f9530a68559b080d7ce3e2ed692b616d26a320f41d480ca0ea28433e782",
+    )
+    @test gd.reference_physical_candidate
+    @test !gd.lot_specific
+    @test !gd.production_qualified
+    @test rebco_tier_a_macroscopic_capture(gd) > 0.0
+    coarse = solve_rebco_tier_a_slab(
+        gd;angle_from_tape_plane_deg=1.0,cells=16,cache_attenuation=false,
+    )
+    fine = solve_rebco_tier_a_slab(
+        gd;angle_from_tape_plane_deg=1.0,cells=256,cache_attenuation=true,
+    )
+    @test coarse["integrated_capture_relative_error"] < 1.0e-12
+    @test fine["integrated_capture_relative_error"] < 1.0e-12
+    @test fine["peak_sublayer_capture_relative_error"] <
+        coarse["peak_sublayer_capture_relative_error"]
+    @test fine["capture_fraction"] ≈ coarse["capture_fraction"] rtol=1.0e-12
+    @test_throws ErrorException REBCO_Tier_A_Slab_Input(
+        "SaBCO",6.0,700.0,Dict("Sm-149" => (0.1,1.0)),1.0,"0"^64,
+    )
+end

@@ -229,6 +229,8 @@ module Radiant
     export solve_rebco_self_shielding_axis_sweep,rebco_self_shielding_receipt
     export rebco_self_shielding_is_physically_qualified
     export REBCO_Family_Consumer_Binding,bind_rebco_family_consumer
+    export REBCO_TIER_A_SLAB_SCHEMA,REBCO_Tier_A_Slab_Input
+    export rebco_tier_a_macroscopic_capture,solve_rebco_tier_a_slab
 
     export SubkeV_Thermalization_Kernel,SubkeV_Thermalization_Result
     export NonEquilibrium_Decay_Channel,NonEquilibrium_Thermalization_Model

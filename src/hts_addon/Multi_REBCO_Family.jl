@@ -2,6 +2,7 @@ const REBCO_MATERIAL_FAMILY_PACKET_SCHEMA = "radiant.hts.rebco_material_family_p
 const REBCO_COMPARISON_CONTRACT_SCHEMA = "radiant.hts.rebco_comparison_contract/v1"
 const REBCO_SELF_SHIELDING_SCHEMA = "radiant.hts.rebco_self_shielding_axis_sweep/v1"
 const REBCO_CONSUMER_BINDING_SCHEMA = "radiant.hts.rebco_consumer_binding/v1"
+const REBCO_TIER_A_SLAB_SCHEMA = "radiant.hts.rebco_tier_a_slab_input/v1"
 
 const REBCO_FAMILY_IDENTITIES = Dict{String,Tuple{String,Symbol}}(
     "YBCO" => ("Y",:confirmed),
@@ -15,6 +16,117 @@ const REBCO_PACKET_STATUSES = (:verification,:candidate,:qualified_input)
 const REBCO_COMPARISON_MODES = (:controlled_substitution,:realistic_product)
 const REBCO_CONSUMER_CLASSES = (:source,:deposition,:pka,:activation)
 const REBCO_BINDING_STATUSES = (:verification,:candidate,:blocked_input,:qualified_input)
+
+"""Reference-candidate slab input. It cannot represent a lot-qualified tape."""
+struct REBCO_Tier_A_Slab_Input
+    schema::String
+    material_tag::String
+    density_g_cm3::Float64
+    molar_mass_g_mol::Float64
+    isotope_capture_barn::Dict{String,Tuple{Float64,Float64}}
+    film_thickness_um::Float64
+    material_packet_sha256::String
+    source_energy_eV::Float64
+    reference_physical_candidate::Bool
+    lot_specific::Bool
+    production_qualified::Bool
+end
+
+function REBCO_Tier_A_Slab_Input(
+    material_tag::AbstractString,density_g_cm3::Real,molar_mass_g_mol::Real,
+    isotope_capture_barn::AbstractDict,film_thickness_um::Real,
+    material_packet_sha256::AbstractString;source_energy_eV::Real=0.0253,
+)
+    family = String(material_tag)
+    haskey(REBCO_FAMILY_IDENTITIES,family) || error("Unsupported REBCO material family.")
+    REBCO_FAMILY_IDENTITIES[family][2] == :confirmed || error(
+        "Tier-A slab transport requires a resolved rare-earth identity.",
+    )
+    density = Float64(density_g_cm3)
+    molar_mass = Float64(molar_mass_g_mol)
+    thickness = Float64(film_thickness_um)
+    energy = Float64(source_energy_eV)
+    all(value -> isfinite(value) && value > 0.0,(density,molar_mass,thickness,energy)) ||
+        error("Tier-A slab physical inputs must be finite and positive.")
+    digest = String(material_packet_sha256)
+    length(digest) == 64 && all(character -> character in "0123456789abcdef",digest) ||
+        error("Tier-A material packet requires a lowercase SHA-256 digest.")
+    components = Dict{String,Tuple{Float64,Float64}}()
+    symbol = REBCO_FAMILY_IDENTITIES[family][1]
+    for (nuclide,raw_values) in isotope_capture_barn
+        values = Tuple(raw_values)
+        length(values) == 2 || error("Each isotope requires abundance and capture cross section.")
+        abundance,cross_section = Float64(values[1]),Float64(values[2])
+        startswith(string(nuclide),symbol*"-") || error(
+            "Tier-A isotope identity does not match the REBCO family.",
+        )
+        isfinite(abundance) && 0.0 <= abundance <= 1.0 || error(
+            "Tier-A isotope abundance must lie in [0,1].",
+        )
+        isfinite(cross_section) && cross_section >= 0.0 || error(
+            "Tier-A capture cross section must be finite and nonnegative.",
+        )
+        components[string(nuclide)] = (abundance,cross_section)
+    end
+    isempty(components) && error("Tier-A slab input requires isotope capture components.")
+    return REBCO_Tier_A_Slab_Input(
+        REBCO_TIER_A_SLAB_SCHEMA,family,density,molar_mass,components,thickness,digest,
+        energy,true,false,false,
+    )
+end
+
+function rebco_tier_a_macroscopic_capture(input::REBCO_Tier_A_Slab_Input)
+    input.reference_physical_candidate && !input.lot_specific && !input.production_qualified ||
+        error("Tier-A input cannot be lot-specific or production-qualified.")
+    avogadro = 6.02214076e23
+    rare_earth_density = input.density_g_cm3/input.molar_mass_g_mol*avogadro
+    return sum(
+        rare_earth_density*abundance*cross_section*1.0e-24
+        for (abundance,cross_section) in values(input.isotope_capture_barn)
+    )
+end
+
+"""One-dimensional reference-candidate capture solve in the local film coordinate."""
+function solve_rebco_tier_a_slab(
+    input::REBCO_Tier_A_Slab_Input;angle_from_tape_plane_deg::Real,cells::Integer,
+    cache_attenuation::Bool=false,
+)
+    angle = Float64(angle_from_tape_plane_deg)
+    isfinite(angle) && 0.0 < angle <= 90.0 || error("Incidence angle must lie in (0,90].")
+    cells >= 1 || error("Tier-A slab cell count must be positive.")
+    mu = sind(angle)
+    sigma = rebco_tier_a_macroscopic_capture(input)
+    normal_cell_width_cm = input.film_thickness_um*1.0e-4/cells
+    optical_depth_cell = sigma*normal_cell_width_cm/mu
+    attenuation = cache_attenuation ? exp(-optical_depth_cell) : 0.0
+    incident = 1.0
+    captures = Vector{Float64}(undef,cells)
+    for index in eachindex(captures)
+        transmitted = incident*(cache_attenuation ? attenuation : exp(-optical_depth_cell))
+        captures[index] = incident-transmitted
+        incident = transmitted
+    end
+    exact_capture = -expm1(-optical_depth_cell*cells)
+    integrated_capture = sum(captures)
+    exact_surface_capture_density = sigma/mu
+    numerical_peak_capture_density = captures[1]/normal_cell_width_cm
+    peak_relative_error = exact_surface_capture_density == 0.0 ? 0.0 :
+        abs(numerical_peak_capture_density/exact_surface_capture_density-1.0)
+    return Dict{String,Any}(
+        "schema" => "radiant.hts.rebco_tier_a_slab_result/v1",
+        "material_tag" => input.material_tag,"angle_from_tape_plane_deg" => angle,
+        "cells" => Int64(cells),"unknown_count" => Int64(cells),
+        "macroscopic_capture_cm_inv" => sigma,"capture_fraction" => integrated_capture,
+        "exact_capture_fraction" => exact_capture,
+        "integrated_capture_relative_error" =>
+            abs(integrated_capture-exact_capture)/max(exact_capture,eps(Float64)),
+        "peak_sublayer_capture_relative_error" => peak_relative_error,
+        "transmitted_fraction" => incident,"capture_profile" => captures,
+        "cache_attenuation" => cache_attenuation,
+        "reference_physical_candidate" => true,"lot_specific" => false,
+        "production_qualified" => false,
+    )
+end
 
 _rebco_string_dict(values::AbstractDict) = Dict{String,String}(
     string(key) => string(value) for (key,value) in values
