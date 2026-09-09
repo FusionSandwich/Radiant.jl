@@ -64,7 +64,11 @@ elseif type == "sternheimer"
     Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
 
     C = -2*log(I/Ωp) - 1
-    X = log10(sqrt(2*Ei*ratio_mass+Ei^2))
+    # X = log10(βγ) = log10(p/Mc), momentum in units of the incident particle's own
+    # mass. sqrt(2*Ei*ratio_mass + Ei^2) is p/(mₑc), so it must be divided by
+    # ratio_mass = M/mₑ. Do not "simplify" this away: ratio_mass == 1 for electrons
+    # and positrons, which is why the two forms look identical there.
+    X = log10(sqrt(2*Ei*ratio_mass+Ei^2)/ratio_mass)
 
     if state_of_matter ∈ ["solid","liquid"]
         if I ≥ 0.0001/mₑc² && -C ≥ 5.215
