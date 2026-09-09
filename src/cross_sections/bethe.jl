@@ -359,12 +359,13 @@ function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Flo
     #----
     # Compute the Barkas correction
     #----
+    # Zi already covers every subshell of every element of the compound, each carrying
+    # its element's electron fraction, so the sum below runs over the whole material.
+    # Looping over the elements around it as well would apply the composition twice.
     ΔLB = 0
-    for iz in range(1,Nz)
-        for δi in range(1,length(Zi))
-            ξ = 0.5616 * CB * Wi[δi]/(γ*β²)
-            ΔLB += charge*α/(γ^2*β²^(3/2)) * Zi[δi] * Wi[δi] * (I₁_barkas(ξ) + I₂_barkas(ξ)/γ^2)
-        end
+    for δi in range(1,length(Zi))
+        ξ = 0.5616 * CB * Wi[δi]/(γ*β²)
+        ΔLB += charge*α/(γ^2*β²^(3/2)) * Zi[δi] * Wi[δi] * (I₁_barkas(ξ) + I₂_barkas(ξ)/γ^2)
     end
     return ΔLB
 end
