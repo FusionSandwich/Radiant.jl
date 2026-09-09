@@ -183,18 +183,29 @@ end
 Gives the pair of coefficient tables an ICRU 49 lookup resolves against, and the list of
 elements that are gases at STP.
 
-The base table covers Z = 1-92 for both particles. The override is consulted first, per
-element and per phase slot, so a per-element alternative source can replace part of the
-base table without any other rule changing. With the default source there is no override
-and every element comes from the base table.
+The base table is the SRIM-fitted one and covers Z = 1-92 for both particles. The override
+is consulted first, per element and per phase slot, so a per-element alternative source can
+replace part of the base table without any other rule changing. With `"srim"` there is no
+override and every element comes from the base table.
+
+`"iaea"` supplies coefficients for the same form, in the same units, with the same `a2`
+bound, fitted to the IAEA electronic stopping power database instead. Coverage is partial —
+41 elements for protons and 30 for alphas — so it is an override on top of full SRIM
+coverage rather than a table in its own right. Every element it omits is served by the SRIM
+entry through the same lookup, so `"iaea"` is well defined for all of Z = 1-92 and both
+particles, never fails and never warns. A material made entirely of elements outside it
+produces results bit-identical to `"srim"`.
+
+The two tables carry different phase conventions, each stated in its own provenance string
+in the data file, so the slot is resolved once per table by `low_energy_slot`.
 
 # Input Argument(s)
 - `particle::Particle` : incoming particle.
-- `source::String` : coefficient source.
+- `source::String` : coefficient source, `"srim"` or `"iaea"`.
 
 # Output Argument(s)
-- `base::Dict` : the per-particle table, covering all 92 elements.
-- `override::Dict` : the per-element override, empty for the default source.
+- `base::Dict` : the SRIM-fitted per-particle table, covering all 92 elements.
+- `override::Dict` : the per-element override, empty for `"srim"`.
 - `gas_elements::Vector{Int64}` : elements that are gases at STP.
 
 """
@@ -202,8 +213,58 @@ function low_energy_tables(particle::Particle,source::String)
     data = fast_load("low_energy_ion.jld2")
     key  = is_alpha(particle) ? "alpha" : "proton"
     base = data["fitted_exponent"][key]
-    override = Dict{String,Dict{Int64,Vector{Float64}}}()
+    if source == "srim"
+        override = Dict{String,Any}()
+    elseif source == "iaea"
+        override = data["fitted_exponent_iaea"][key]
+    else
+        error("Unknown '$source' low-energy coefficient source.")
+    end
+    # gas_elements is a fact about the elements rather than a borrowing from either table,
+    # and is the same eleven either way.
     return base, override, data["fitted_exponent"]["gas_elements"]
+end
+
+"""
+    low_energy_slot(table::Dict,Z::Int64,is_gas::Bool,gas_elements::Vector{Int64})
+
+Gives the phase slot of `table` an element should be read from.
+
+The phase is resolved *before* the source, and the coverage question is then asked of the
+slot rather than of the element. The tempting shortcut — is this element in the override
+anywhere, and if so use it — is a different question and gives the wrong answer for every
+gas-flagged element in a condensed material: the IAEA `"condensed"` slot is empty, because
+no condensed-phase measurement set for a gas-flagged element could be determined, so that
+shortcut would hand a condensed target oxygen's *gas* coefficients, about 8% high, and
+never reach the perfectly good SRIM condensed entry sitting beside it. Nothing in the file
+fails loudly if this is got wrong.
+
+The two tables do not share a convention. The SRIM table carries a `"gas"` slot covering
+all 92 elements and uses it for any target declared gaseous. The IAEA table has no `"gas"`
+slot at all: its `"coefficients"` are the measured fits, which for a gas-flagged element
+are the gas-phase ones, and its `"condensed"` slot is what a condensed target of such an
+element would need. So each table is asked its own question, and a single shared expression
+would silently drop the SRIM gas slot.
+
+# Input Argument(s)
+- `table::Dict` : coefficient table to resolve the slot in.
+- `Z::Int64` : atomic number of the element.
+- `is_gas::Bool` : whether the material is gaseous.
+- `gas_elements::Vector{Int64}` : elements that are gases at STP.
+
+# Output Argument(s)
+- `slot::String` : phase slot, `"gas"`, `"condensed"` or `"coefficients"`.
+
+"""
+function low_energy_slot(table,Z::Int64,is_gas::Bool,gas_elements::Vector{Int64})
+    if is_gas
+        # The haskey on "gas" is what makes this reader work against a table written before
+        # that slot existed, and the slot is not restricted to the elements that are gases
+        # at STP.
+        return (haskey(table,"gas") && haskey(table["gas"],Z)) ? "gas" : "coefficients"
+    else
+        return (Z in gas_elements && haskey(table,"condensed")) ? "condensed" : "coefficients"
+    end
 end
 
 """
@@ -306,19 +367,15 @@ function icru49_stopping(Z::Vector{Int64},ωz::Vector{Float64},E_MeV::Float64,pa
     S = 0.0
     for i in eachindex(Z)
 
-        # Resolve the phase first, then the source. The gas slot covers all 92 elements;
-        # the haskey on it is what makes this reader work against a low_energy_ion.jld2
-        # written before that slot existed, and it must not be assumed to hold only the
-        # elements that are gases at STP.
-        if is_gas
-            slot = haskey(base,"gas") && haskey(base["gas"],Z[i]) ? "gas" : "coefficients"
-        else
-            slot = (Z[i] in gas_elements && haskey(base["condensed"],Z[i])) ? "condensed" : "coefficients"
-        end
-
-        # Ask the coverage question of the slot, not of the element: the override may hold
-        # an element in one phase and not in the other.
-        coef = haskey(override,slot) ? get(override[slot],Z[i],base[slot][Z[i]]) : base[slot][Z[i]]
+        # Resolve the phase first, then the source, and ask the coverage question of the
+        # slot rather than of the element -- see low_energy_slot. Each table is asked with
+        # its own phase convention. Selecting a source does not switch the whole material
+        # over: it is resolved per element, at the point of use, and a compound routinely
+        # ends up drawing from both tables at once.
+        base_slot = low_energy_slot(base,Z[i],is_gas,gas_elements)
+        over_slot = low_energy_slot(override,Z[i],is_gas,gas_elements)
+        coef = haskey(override,over_slot) ? get(override[over_slot],Z[i],base[base_slot][Z[i]]) :
+                                            base[base_slot][Z[i]]
 
         a1,a2,a3,a4,a5 = coef
         s_l = a1 * T^a2

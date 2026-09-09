@@ -35,6 +35,7 @@ mutable struct Inelastic_Collision <: Interaction
     ecut::Dict{Type,Float64}
     emax::Dict{Type,Union{Float64,String}}
     low_energy_model::String
+    low_energy_source::String
     is_bragg_additivity::Bool
 
     # Constructor(s)
@@ -50,6 +51,7 @@ mutable struct Inelastic_Collision <: Interaction
         this.emax = Dict{Type,Union{Float64,String}}()
         for (p,e) in EMAX_DEFAULTS this.set_emax(p,e) end
         this.set_low_energy_model("analytic")
+        this.set_low_energy_source("srim")
         this.set_is_bragg_additivity(false)
         this.is_CSD = true
         this.is_AFP = true
@@ -359,6 +361,107 @@ julia> inelastic_collision.get_low_energy_model()
 """
 function get_low_energy_model(this::Inelastic_Collision)
     return this.low_energy_model
+end
+
+"""
+    set_low_energy_source(this::Inelastic_Collision,source::String)
+
+To choose which coefficients the fitted low-energy branch reads.
+
+- `srim` : fitted to SRIM-2013, all 92 elements from one fit.
+- `iaea` : fitted to the IAEA electronic stopping power database — the compiled
+  experimental literature, 720 references, publications from 1928 to 2025. Same form, same
+  units, same phase convention, same `a2` bound; only the numbers differ.
+
+**It is inert unless `set_low_energy_model("icru49")` is also selected.** There are no
+coefficients in the analytic branch to choose between, and results are bit-identical
+between the two sources there.
+
+`iaea` is a **partial override on top of the SRIM table**, not a table in its own right:
+it covers 41 elements for protons and 30 for alphas, and it is resolved per element at the
+point of use, so a compound routinely draws from both at once. An element is missing only
+because the measurements cannot determine the form — no points on one side of the stopping
+maximum, too few points, or nothing reaching `Ecut` — and every element it omits is served
+by the SRIM entry through the same lookup. So `iaea` never fails, never warns, and leaves
+most materials untouched.
+
+Each entry carries `n_references` and a leave-one-reference-out cross-validated error
+under `["quality"]`, and those are the numbers to read before relying on one. The
+cross-validated median is 4.38% for protons and 3.38% for alphas, against in-sample
+medians of 2.83% and 2.03%; the tail is real and is not hidden — terbium fits its own alpha
+points well and misses by 44% when a reference is held out. Radiant does not gate on these
+numbers: which entries to trust is the user's judgement, and a filter applied here would
+be invisible to them.
+
+**This is a choice of reference, not an upgrade.** Scored against NIST PSTAR/ASTAR, which
+neither table was fitted to, `iaea` is closer for 11 of 23 elements for protons and 6 of
+19 for alphas, and the median is *worse* for both — 1.72% to 2.38% and 1.85% to 3.13%. The
+gains and the losses are both large where they occur: Pt 10.68% to 3.67% against Pb 2.96%
+to 7.19% for protons, Ar 1.42% to 0.42% against Ti 1.04% to 11.27% for alphas. ICRU 49 is
+itself an evaluation of experiment in this same functional form, so this is two empirical
+fits weighing the same disagreeing literature differently, not a model scored against
+theory: `srim` tracks ICRU 49 more closely because SRIM and ICRU 49 are two evaluations by
+overlapping communities of the same older measurements, while `iaea` tracks the current
+compiled database, which includes measurements neither of them saw. The measurements
+disagree among themselves by 14-17%.
+
+The honest reason to select `iaea` is wanting elemental stopping tied to the measurement
+compilation rather than to SRIM's evaluation of it, or working on an element where the two
+disagree and having a reason to trust the measurements. On the evidence above, for alphas
+it is usually worse.
+
+The default stays `srim`: it is the only source covering all 92 elements from one fit, and
+defaulting to a partial one would put a provenance seam in the middle of the table where a
+trend across Z could no longer be told from a change of data source.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `source::String` : coefficient source, `"srim"` or `"iaea"`.
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.set_low_energy_model("icru49")
+julia> inelastic_collision.set_low_energy_source("iaea")
+```
+
+# Reference(s)
+- IAEA, Electronic Stopping Power of Matter for Ions (database),
+  https://www-nds.iaea.org/stopping/. Sole source of the "iaea" coefficients.
+"""
+function set_low_energy_source(this::Inelastic_Collision,source::String)
+    if lowercase(source) ∉ ["srim","iaea"] error("Unknown '$source' low-energy coefficient source.") end
+    this.low_energy_source = lowercase(source)
+end
+
+"""
+    get_low_energy_source(this::Inelastic_Collision)
+
+To get the coefficient source of the fitted low-energy branch. Inert unless the `icru49`
+low-energy model is selected.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+
+# Output Argument(s)
+- `source::String` : coefficient source.
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.get_low_energy_source()
+"srim"
+```
+
+# Reference(s)
+- IAEA, Electronic Stopping Power of Matter for Ions (database),
+  https://www-nds.iaea.org/stopping/. Sole source of the "iaea" coefficients.
+"""
+function get_low_energy_source(this::Inelastic_Collision)
+    return this.low_energy_source
 end
 
 """
@@ -816,6 +919,7 @@ function sp(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},atz:
         ecut_MeV=get(this.ecut,typeof(particle),NaN),
         emax=get(this.emax,typeof(particle),nothing),
         low_energy_model=this.low_energy_model,
+        low_energy_source=this.low_energy_source,
         is_bragg_additivity=this.is_bragg_additivity)
 
     # Compute the catastrophic Møller- or Bhabha- derived stopping power
