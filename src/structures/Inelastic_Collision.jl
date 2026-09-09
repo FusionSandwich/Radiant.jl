@@ -35,6 +35,7 @@ mutable struct Inelastic_Collision <: Interaction
     ecut::Dict{Type,Float64}
     emax::Dict{Type,Union{Float64,String}}
     low_energy_model::String
+    is_bragg_additivity::Bool
 
     # Constructor(s)
     function Inelastic_Collision()
@@ -49,6 +50,7 @@ mutable struct Inelastic_Collision <: Interaction
         this.emax = Dict{Type,Union{Float64,String}}()
         for (p,e) in EMAX_DEFAULTS this.set_emax(p,e) end
         this.set_low_energy_model("analytic")
+        this.set_is_bragg_additivity(false)
         this.is_CSD = true
         this.is_AFP = true
         this.is_AFP_decomposition = false
@@ -357,6 +359,74 @@ julia> inelastic_collision.get_low_energy_model()
 """
 function get_low_energy_model(this::Inelastic_Collision)
     return this.low_energy_model
+end
+
+"""
+    set_is_bragg_additivity(this::Inelastic_Collision,is_bragg_additivity::Bool)
+
+To build the stopping power of a compound from its elements rather than from its own
+composition. Each element is evaluated separately and the results are combined with mass
+fractions, `S = Σⱼ ωⱼ Sⱼ`, which is what mass stopping power is additive in.
+
+Every element is evaluated at the *compound* density, because the density effect in a
+compound is set by the compound's electron density and not by what the pure element would
+do on its own.
+
+**Scope: the Bethe branch only.** The fitted `icru49` low-energy branch is already
+unconditionally additive whatever this flag says, so scoping the flag here is what stops
+it meaning different things in different energy regions. With the `analytic` model each
+element's extension anchors to that element's own Bethe value and slope at `Ecut`.
+
+**Enabling this overrides the tabulated compound mean excitation energy.**
+`effective_mean_excitation_energy` returns the ICRU value for canonical compounds — 75 eV
+for liquid water — before falling back to additivity. Building water from H and O
+elementwise means each element carries its own I and that 75 eV never enters. For
+electrons this is a visible shift, and in the opposite direction from what a user who
+trusts ICRU would want, so it is a choice to be made knowingly.
+
+Note also that any additivity-based kernel misses NIST's liquid water by about 28% at
+1 keV and 18% at 100 keV. Applying additivity to NIST's own hydrogen and oxygen tables
+reproduces the same gap, so that is the assumption failing rather than the implementation.
+
+Applies to all particles.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `is_bragg_additivity::Bool` : activate (true) or deactivate (false) Bragg additivity.
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.set_is_bragg_additivity(true)
+```
+"""
+function set_is_bragg_additivity(this::Inelastic_Collision,is_bragg_additivity::Bool)
+    this.is_bragg_additivity = is_bragg_additivity
+end
+
+"""
+    get_is_bragg_additivity(this::Inelastic_Collision)
+
+To know whether compounds are built from their elements by Bragg additivity.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+
+# Output Argument(s)
+- `is_bragg_additivity::Bool` : whether Bragg additivity is enabled.
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.get_is_bragg_additivity()
+false
+```
+"""
+function get_is_bragg_additivity(this::Inelastic_Collision)
+    return this.is_bragg_additivity
 end
 
 """
@@ -745,7 +815,8 @@ function sp(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},atz:
         is_shell_correction=this.is_shell_correction,
         ecut_MeV=get(this.ecut,typeof(particle),NaN),
         emax=get(this.emax,typeof(particle),nothing),
-        low_energy_model=this.low_energy_model)
+        low_energy_model=this.low_energy_model,
+        is_bragg_additivity=this.is_bragg_additivity)
 
     # Compute the catastrophic Møller- or Bhabha- derived stopping power
     Sc = 0

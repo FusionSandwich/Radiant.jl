@@ -4,7 +4,7 @@
     state_of_matter::String,I_eff::Float64;
     atomic_weights::Union{Nothing,Vector{Float64}}=nothing,ecut_MeV::Float64=NaN,
     emax::Union{Float64,String,Nothing}=nothing,low_energy_model::String="analytic",
-    low_energy_source::String="srim",
+    low_energy_source::String="srim",is_bragg_additivity::Bool=false,
     is_bethe_correction::Bool=true,is_density_correction::Bool=true,
     is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true)
 
@@ -35,6 +35,8 @@ and heavy ions (proton, muon, alpha particle).
   the Z-dependent fit `emax_stopping_maximum`.
 - `low_energy_model::String` : model used below `Ecut`, `"analytic"` or `"icru49"`.
 - `low_energy_source::String` : coefficient source of the fitted low-energy model.
+- `is_bragg_additivity::Bool` : boolean to build a compound from its elements rather than
+  from its own composition.
 
 # Output Argument(s)
 - `S::Float64` : stopping power.
@@ -45,7 +47,7 @@ and heavy ions (proton, muon, alpha particle).
   particles from the corrected Bethe formula.
 
 """
-function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,N_density::Float64,Ei::Float64,particle::Particle,density_correction::String="fano",state_of_matter::String="solid",I_eff::Float64=NaN; atomic_weights::Union{Nothing,Vector{Float64}}=nothing,is_bethe_correction::Bool=true,is_density_correction::Bool=true,is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true,ecut_MeV::Float64=NaN,emax::Union{Float64,String,Nothing}=nothing,low_energy_model::String="analytic",low_energy_source::String="srim")
+function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,N_density::Float64,Ei::Float64,particle::Particle,density_correction::String="fano",state_of_matter::String="solid",I_eff::Float64=NaN; atomic_weights::Union{Nothing,Vector{Float64}}=nothing,is_bethe_correction::Bool=true,is_density_correction::Bool=true,is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true,ecut_MeV::Float64=NaN,emax::Union{Float64,String,Nothing}=nothing,low_energy_model::String="analytic",low_energy_source::String="srim",is_bragg_additivity::Bool=false)
 
     #----
     # Set the minimum energy cutoff over which the corrected Bethe formula is valid.
@@ -72,6 +74,42 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
     if !isnan(ecut_MeV) Ecut = ecut_MeV/mₑ end
     if !isnothing(emax)
         Emax = (emax isa String) ? emax_stopping_maximum(Z,atz,particle)/mₑ : emax/mₑ
+    end
+
+    #----
+    # Bragg additivity
+    #----
+    # Build the compound by evaluating each element on its own and combining with mass
+    # fractions. Mass stopping power is additive in mass fractions; this is a different
+    # question from the Eq. (53) electron weighting inside the bracket.
+    #
+    # ρ is the compound's density, not the element's: the density effect in a compound is
+    # set by the compound's electron density, not by what graphite would do on its own.
+    # That also means no elemental density table is needed, and since every element is
+    # evaluated at the same density the mass-stopping-power conversion cancels and the
+    # combination is a plain sum over the linear stopping powers bethe returns.
+    #
+    # N_density is per element at the compound's mass density. I_eff is NaN so each
+    # element carries its own tabulated mean excitation energy, which is the whole point.
+    # The recursion passes is_bragg_additivity = false, or it would not terminate.
+    if is_bragg_additivity && length(Z) > 1
+        element_atomic_weights = isnothing(atomic_weights) ? standard_atomic_weight.(Z) : atomic_weights
+        S = 0.0
+        for j in eachindex(Z)
+            S += ωz[j] * bethe([Z[j]],[1.0],[1.0],ρ,nuclei_density(element_atomic_weights[j],ρ),Ei,particle,density_correction,state_of_matter,NaN;
+                atomic_weights=[element_atomic_weights[j]],
+                is_bethe_correction=is_bethe_correction,
+                is_density_correction=is_density_correction,
+                is_shell_correction=is_shell_correction,
+                is_lindhard_sorensen=is_lindhard_sorensen,
+                is_barkas=is_barkas,
+                ecut_MeV=ecut_MeV,
+                emax=emax,
+                low_energy_model=low_energy_model,
+                low_energy_source=low_energy_source,
+                is_bragg_additivity=false)
+        end
+        return S
     end
 
     #----
