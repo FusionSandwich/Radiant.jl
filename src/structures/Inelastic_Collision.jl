@@ -32,6 +32,7 @@ mutable struct Inelastic_Collision <: Interaction
     is_distant_collision::Bool
     density_correction::String
     scattering_model::String
+    ecut::Dict{Type,Float64}
 
     # Constructor(s)
     function Inelastic_Collision()
@@ -41,6 +42,8 @@ mutable struct Inelastic_Collision <: Interaction
         this.incoming_particle = unique([t[1] for t in collect(keys(this.interaction_types))])
         this.interaction_particles = unique([t[2] for t in collect(keys(this.interaction_types))])
         this.set_density_correction("fano")
+        this.ecut = Dict{Type,Float64}()
+        for (p,e) in ECUT_DEFAULTS this.set_ecut(p,e) end
         this.is_CSD = true
         this.is_AFP = true
         this.is_AFP_decomposition = false
@@ -105,6 +108,75 @@ julia> elastic_collision.set_density_correction("sternheimer")
 function set_density_correction(this::Inelastic_Collision,density_correction::String)
     if lowercase(density_correction) ∉ ["fano","sternheimer","none"] error("Unknown '$density_correction' density correction.") end
     this.density_correction = lowercase(density_correction)
+end
+
+"""
+    ECUT_DEFAULTS
+
+Default energy below which `bethe` leaves the corrected Bethe formula for its low-energy
+branch, per particle [in MeV]. These are the values `bethe` used before `set_ecut` existed.
+
+"""
+const ECUT_DEFAULTS = Dict{Type,Float64}(
+    Electron => 0.001, Positron => 0.001,
+    Muon     => 0.15,  Antimuon => 0.15,
+    Proton   => 0.75,  Antiproton => 0.75,
+    Alpha    => 5.0
+)
+
+"""
+    set_ecut(this::Inelastic_Collision,particle::Type,energy::Real)
+
+To set the energy above which the corrected Bethe formula is used for a given particle,
+and below which the stopping power is taken from the low-energy branch.
+
+Lowering it extends the Bethe formula into a region where its corrections are less well
+determined; the shell-correction tables stop at a tabulated γ and raise an error naming
+this setter when they run out.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `particle::Type` : particle type, one of `Electron`, `Positron`, `Muon`, `Antimuon`,
+  `Proton`, `Antiproton` or `Alpha`.
+- `energy::Real` : cutoff energy [in MeV].
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.set_ecut(Proton,1.0)
+```
+"""
+function set_ecut(this::Inelastic_Collision,particle::Type,energy::Real)
+    if !haskey(ECUT_DEFAULTS,particle) error("The cutoff energy is undefined for the '$particle' particle. It is defined for $(collect(keys(ECUT_DEFAULTS))).") end
+    if energy ≤ 0 error("The cutoff energy should be positive.") end
+    this.ecut[particle] = float(energy)
+end
+
+"""
+    get_ecut(this::Inelastic_Collision,particle::Type)
+
+To get the energy above which the corrected Bethe formula is used for a given particle.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `particle::Type` : particle type.
+
+# Output Argument(s)
+- `energy::Float64` : cutoff energy [in MeV].
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.get_ecut(Proton)
+0.75
+```
+"""
+function get_ecut(this::Inelastic_Collision,particle::Type)
+    if !haskey(this.ecut,particle) error("The cutoff energy is undefined for the '$particle' particle. It is defined for $(collect(keys(ECUT_DEFAULTS))).") end
+    return this.ecut[particle]
 end
 
 """
@@ -488,7 +560,10 @@ Gives the stopping power for inelastic collision interaction.
 function sp(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,N_density::Float64,state_of_matter::String,Ei::Float64,Ec::Float64,particle::Particle,I_eff::Float64=NaN,atomic_weights::Union{Nothing,Vector{Float64}}=nothing)
 
     # Compute the total stopping power
-    Stot = bethe(Z,ωz,atz,ρ,N_density,Ei,particle,this.density_correction,state_of_matter,I_eff; atomic_weights=atomic_weights,is_shell_correction=this.is_shell_correction)
+    Stot = bethe(Z,ωz,atz,ρ,N_density,Ei,particle,this.density_correction,state_of_matter,I_eff;
+        atomic_weights=atomic_weights,
+        is_shell_correction=this.is_shell_correction,
+        ecut_MeV=get(this.ecut,typeof(particle),NaN))
 
     # Compute the catastrophic Møller- or Bhabha- derived stopping power
     Sc = 0
