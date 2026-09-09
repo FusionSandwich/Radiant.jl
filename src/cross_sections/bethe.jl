@@ -166,41 +166,16 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         S = 4*π*rₑ^2/β² * Zc^2 * 𝒩ₑ_eff * ( log(2*β²/I) + log(γ^2) - β² + f/2 - Cz - δF/2 + ΔL_LS + ΔL_B )
 
     #----
-    # Analytical extension to low-energies
+    # Low-energy branch
     #----
     else
-
-        #----
-        # Estimate parameters A and B
-        #----
-        h = 0.00005
-        Sc = bethe(Z,ωz,atz,ρ,N_density,Ecut,particle,density_correction,state_of_matter,I_eff;
+        S = low_energy_stopping(Z,ωz,atz,ρ,N_density,Ei,particle,density_correction,state_of_matter,I_eff,Ecut,Emax;
             atomic_weights=atomic_weights,
             is_bethe_correction=is_bethe_correction,
             is_density_correction=is_density_correction,
             is_shell_correction=is_shell_correction,
             is_lindhard_sorensen=is_lindhard_sorensen,
             is_barkas=is_barkas)
-        Sc_plus_h = bethe(Z,ωz,atz,ρ,N_density,Ecut+h,particle,density_correction,state_of_matter,I_eff;
-            atomic_weights=atomic_weights,
-            is_bethe_correction=is_bethe_correction,
-            is_density_correction=is_density_correction,
-            is_shell_correction=is_shell_correction,
-            is_lindhard_sorensen=is_lindhard_sorensen,
-            is_barkas=is_barkas)
-        dSdE = (Sc_plus_h - Sc)/h
-        A = (3*log(Sc)*Sc - 2*dSdE*Ecut*log(Ecut/Emax))/(3*Sc)
-        B = -2*Ecut*dSdE/(3*Sc*sqrt(log(Ecut/Emax)))
-
-        #----
-        # Compute total cross-sections using analytical formula
-        #----
-        t = Ei/Emax
-        if t ≥ 1
-            S = exp(A-B*(log(t))^1.5)
-        else
-            S = 1.5*exp(A)*sqrt(t)*(1-t/3)
-        end
     end
     return S
 end
