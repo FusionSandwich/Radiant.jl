@@ -3,7 +3,8 @@
     N_density::Float64,Ei::Float64,particle::Particle,density_correction::String,
     state_of_matter::String,I_eff::Float64;
     atomic_weights::Union{Nothing,Vector{Float64}}=nothing,ecut_MeV::Float64=NaN,
-    emax::Union{Float64,String,Nothing}=nothing,
+    emax::Union{Float64,String,Nothing}=nothing,low_energy_model::String="analytic",
+    low_energy_source::String="srim",
     is_bethe_correction::Bool=true,is_density_correction::Bool=true,
     is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true)
 
@@ -32,6 +33,8 @@ and heavy ions (proton, muon, alpha particle).
 - `emax::Union{Float64,String,Nothing}` : energy of the stopping-power maximum of the
   analytic low-energy extension [in MeV]; `nothing` ⟹ the per-particle default, `"f"` ⟹
   the Z-dependent fit `emax_stopping_maximum`.
+- `low_energy_model::String` : model used below `Ecut`, `"analytic"` or `"icru49"`.
+- `low_energy_source::String` : coefficient source of the fitted low-energy model.
 
 # Output Argument(s)
 - `S::Float64` : stopping power.
@@ -42,7 +45,7 @@ and heavy ions (proton, muon, alpha particle).
   particles from the corrected Bethe formula.
 
 """
-function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,N_density::Float64,Ei::Float64,particle::Particle,density_correction::String="fano",state_of_matter::String="solid",I_eff::Float64=NaN; atomic_weights::Union{Nothing,Vector{Float64}}=nothing,is_bethe_correction::Bool=true,is_density_correction::Bool=true,is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true,ecut_MeV::Float64=NaN,emax::Union{Float64,String,Nothing}=nothing)
+function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,N_density::Float64,Ei::Float64,particle::Particle,density_correction::String="fano",state_of_matter::String="solid",I_eff::Float64=NaN; atomic_weights::Union{Nothing,Vector{Float64}}=nothing,is_bethe_correction::Bool=true,is_density_correction::Bool=true,is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true,ecut_MeV::Float64=NaN,emax::Union{Float64,String,Nothing}=nothing,low_energy_model::String="analytic",low_energy_source::String="srim")
 
     #----
     # Set the minimum energy cutoff over which the corrected Bethe formula is valid.
@@ -178,6 +181,25 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         #----
         S = 4*π*rₑ^2/β² * Zc^2 * 𝒩ₑ_eff * ( log(2*β²/I) + log(γ^2) - β² + f/2 - Cz - δF/2 + ΔL_LS + ΔL_B )
 
+        #----
+        # Handover window, from Ecut up to 2*Ecut
+        #----
+        # The fitted form is not tied to the Bethe branch at Ecut, so without blending the
+        # handover leaves a discontinuity of up to 13.6%, which multigroup.jl would carry
+        # straight into the CSD operator. The window sits above Ecut, where S is already in
+        # hand: the Bethe branch is never evaluated below its own cutoff. E_top is a
+        # multiple of Ecut, not a constant, so set_ecut moves both ends together and the
+        # window can never invert. The guard is the same predicate the branch below Ecut
+        # uses, or the two would disagree about a material.
+        E_MeV = Ei*mₑ
+        Ecut_MeV = Ecut*mₑ
+        E_top = 2*Ecut_MeV
+        if low_energy_model != "analytic" && E_MeV < E_top && has_low_energy_data(Z,particle)
+            w = blend_weight(E_MeV,Ecut_MeV,E_top)
+            S_fit = icru49_stopping(Z,ωz,E_MeV,particle,state_of_matter,low_energy_source) * ρ/mₑ
+            S = (1-w)*S_fit + w*S
+        end
+
     #----
     # Low-energy branch
     #----
@@ -189,7 +211,9 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
             is_shell_correction=is_shell_correction,
             is_lindhard_sorensen=is_lindhard_sorensen,
             is_barkas=is_barkas,
-            ecut_MeV=ecut_MeV)
+            ecut_MeV=ecut_MeV,
+            low_energy_model=low_energy_model,
+            low_energy_source=low_energy_source)
     end
     return S
 end

@@ -34,6 +34,7 @@ mutable struct Inelastic_Collision <: Interaction
     scattering_model::String
     ecut::Dict{Type,Float64}
     emax::Dict{Type,Union{Float64,String}}
+    low_energy_model::String
 
     # Constructor(s)
     function Inelastic_Collision()
@@ -47,6 +48,7 @@ mutable struct Inelastic_Collision <: Interaction
         for (p,e) in ECUT_DEFAULTS this.set_ecut(p,e) end
         this.emax = Dict{Type,Union{Float64,String}}()
         for (p,e) in EMAX_DEFAULTS this.set_emax(p,e) end
+        this.set_low_energy_model("analytic")
         this.is_CSD = true
         this.is_AFP = true
         this.is_AFP_decomposition = false
@@ -266,6 +268,95 @@ julia> inelastic_collision.get_emax(Proton)
 function get_emax(this::Inelastic_Collision,particle::Type)
     if !haskey(this.emax,particle) error("The stopping-power maximum is undefined for the '$particle' particle. It is defined for $(collect(keys(EMAX_DEFAULTS))).") end
     return this.emax[particle]
+end
+
+"""
+    set_low_energy_model(this::Inelastic_Collision,model::String)
+
+To set the model used for the stopping power below `Ecut`.
+
+- `analytic` : analytical extension anchored on the value and the slope of the Bethe
+  branch at `Ecut`. Smooth at the join, but it extrapolates from that single anchor and
+  its error grows with distance from it.
+- `icru49` : the empirical form of ICRU Report 49, attributed there to Andersen and
+  Ziegler, with per-element coefficients fitted to SRIM-2013. The low branch exponent is
+  fitted per element rather than pinned at 0.45, which is what removes the separate
+  `sqrt(E)` branch the pinned version carries below 10 keV. It is confined to [0.30, 0.80],
+  a departure from the parametrization as published: unconstrained, seven of the 92 proton
+  fits ran to 0.8-1.31 with 22-43% error extrapolating below the fitting window.
+
+The default is `analytic`, and it stays the default in this change: that the evidence
+favours the fitted branch does not make a default swap part of it.
+
+Measured against NIST PSTAR/ASTAR below `Ecut` over the 74 ICRU 49 materials, median
+deviation goes from 18.72% to 2.67% for protons and 26.40% to 3.60% for alphas. Against
+the same form with the exponent pinned at 0.45 the improvement is decisive for alphas and
+close to a coin flip for protons -- 3.33% to 2.67%, with the whole proton gain coming from
+below 10 keV, where the fitted exponent replaces the pinned form's bolted-on `sqrt(E)`.
+That region is where PSTAR and ASTAR are themselves fits to experiment in this same
+empirical form, so the comparison is between two empirical fits of one functional form and
+not between a model and theory.
+
+**10 keV is the floor of validity.** Below about 5 keV this branch is badly wrong for some
+elements -- helium worst, 153% median below 10 keV -- and no choice of exponent fixes it.
+
+Above `Ecut` the fitted form is blended onto the Bethe branch over one octave, so that the
+handover is C¹ rather than leaving a step of up to 13.6% in the CSD operator.
+
+Below `Ecut` with `icru49` selected, `sp` computes `Sr = Stot - Sc` where `Stot` is a fit
+to SRIM's *total electronic* stopping while `Sc` comes from the analytic heavy-particle
+differential cross-section, so the soft/catastrophic split is approximate in that region.
+In practice it rarely bites -- a 750 keV proton can transfer at most about 1.6 keV to an
+electron, so `Sc` is zero unless the electron group structure reaches below that -- and it
+is not new, since the analytic extension is not a Bethe evaluation either.
+
+The fitted table covers Z = 1-92, protons and alphas only. Any other particle, or any
+element outside that range, falls back to the analytic extension silently.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `model::String` : low-energy model, `"analytic"` or `"icru49"`.
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.set_low_energy_model("icru49")
+```
+
+# Reference(s)
+- ICRU Report 49 (1993), Stopping Powers and Ranges for Protons and Alpha Particles.
+- Andersen and Ziegler (1977), Hydrogen: Stopping Powers and Ranges in All Elements.
+- Salvat (2022), Bethe stopping-power formula and its corrections. Eqs. (134)-(136), for
+  the free-exponent parametrization and the fitting prescription.
+"""
+function set_low_energy_model(this::Inelastic_Collision,model::String)
+    if lowercase(model) ∉ ["analytic","icru49"] error("Unknown '$model' low-energy model.") end
+    this.low_energy_model = lowercase(model)
+end
+
+"""
+    get_low_energy_model(this::Inelastic_Collision)
+
+To get the model used for the stopping power below `Ecut`.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+
+# Output Argument(s)
+- `model::String` : low-energy model.
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.get_low_energy_model()
+"analytic"
+```
+"""
+function get_low_energy_model(this::Inelastic_Collision)
+    return this.low_energy_model
 end
 
 """
@@ -653,7 +744,8 @@ function sp(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},atz:
         atomic_weights=atomic_weights,
         is_shell_correction=this.is_shell_correction,
         ecut_MeV=get(this.ecut,typeof(particle),NaN),
-        emax=get(this.emax,typeof(particle),nothing))
+        emax=get(this.emax,typeof(particle),nothing),
+        low_energy_model=this.low_energy_model)
 
     # Compute the catastrophic Møller- or Bhabha- derived stopping power
     Sc = 0
