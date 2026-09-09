@@ -90,3 +90,41 @@ function low_energy_stopping(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{F
     end
     return S
 end
+
+"""
+    emax_stopping_maximum(Z::Vector{Int64},atz::Vector{Float64},particle::Particle)
+
+Least-squares power-law fit to the measured stopping-power maximum of all 92 elements,
+against SRIM-2013. Returns the energy [in MeV].
+
+Both branches of the analytic low-energy extension have zero slope at `t = Ei/Emax = 1`,
+so `Emax` is where that extension puts the stopping-power maximum. A single constant
+asserts the same peak energy in hydrogen as in uranium; measured against SRIM-2013 the
+real peak runs 41-164 keV for protons and 0.42-1.19 MeV for alphas, rising with the
+target's atomic number, and the proton constant is low by about a factor of two on
+average.
+
+`Zbar = sum(atz .* Z)` is the mean atomic number per atom, the same definition
+`barkas_correction` uses for `CB`. The fit was derived on pure elements, where the atom-
+and mass-weighted means coincide, so the compound case is unconstrained either way and
+consistency decides it.
+
+# Input Argument(s)
+- `Z::Vector{Int64}` : atomic numbers of the elements in the material.
+- `atz::Vector{Float64}` : atomic fraction of the elements composing the material.
+- `particle::Particle` : incoming particle.
+
+# Output Argument(s)
+- `Emax::Float64` : energy of the stopping-power maximum [in MeV].
+
+"""
+function emax_stopping_maximum(Z::Vector{Int64},atz::Vector{Float64},particle::Particle)
+    Zbar = sum(atz .* Z)
+    if is_proton(particle) || is_antiproton(particle)
+        return 0.0481 * Zbar^0.190
+    elseif is_alpha(particle)
+        return 0.4829 * Zbar^0.114
+    else
+        error("No stopping-maximum fit for the given particle.")
+    end
+end

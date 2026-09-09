@@ -33,6 +33,7 @@ mutable struct Inelastic_Collision <: Interaction
     density_correction::String
     scattering_model::String
     ecut::Dict{Type,Float64}
+    emax::Dict{Type,Union{Float64,String}}
 
     # Constructor(s)
     function Inelastic_Collision()
@@ -44,6 +45,8 @@ mutable struct Inelastic_Collision <: Interaction
         this.set_density_correction("fano")
         this.ecut = Dict{Type,Float64}()
         for (p,e) in ECUT_DEFAULTS this.set_ecut(p,e) end
+        this.emax = Dict{Type,Union{Float64,String}}()
+        for (p,e) in EMAX_DEFAULTS this.set_emax(p,e) end
         this.is_CSD = true
         this.is_AFP = true
         this.is_AFP_decomposition = false
@@ -177,6 +180,92 @@ julia> inelastic_collision.get_ecut(Proton)
 function get_ecut(this::Inelastic_Collision,particle::Type)
     if !haskey(this.ecut,particle) error("The cutoff energy is undefined for the '$particle' particle. It is defined for $(collect(keys(ECUT_DEFAULTS))).") end
     return this.ecut[particle]
+end
+
+"""
+    EMAX_DEFAULTS
+
+Default energy of the stopping-power maximum used by the analytic low-energy extension,
+per particle [in MeV]. These are the values `bethe` used before `set_emax` existed.
+
+"""
+const EMAX_DEFAULTS = Dict{Type,Union{Float64,String}}(
+    Electron => 0.0001, Positron => 0.0001,
+    Muon     => 0.02,   Antimuon => 0.02,
+    Proton   => 0.05,   Antiproton => 0.05,
+    Alpha    => 0.8
+)
+
+"""
+    set_emax(this::Inelastic_Collision,particle::Type,energy::Real)
+    set_emax(this::Inelastic_Collision,particle::Type,mode::String)
+
+To set the energy of the stopping-power maximum of the analytic low-energy extension.
+
+`Emax` is read only inside that extension and is meaningful only there: both of its
+branches have zero slope at `Ei/Emax = 1`, so `Emax` is where the extension puts the
+stopping-power maximum. Nothing at or above `Ecut` changes, and neither does the
+`"icru49"` low-energy branch, which does not use it.
+
+Passing `"f"` selects `emax_stopping_maximum`, a power-law fit in the mean atomic number
+to the measured maximum of all 92 elements against SRIM-2013. A single constant asserts
+the same peak energy in hydrogen as in uranium, where the real peak runs 41-164 keV for
+protons and 0.42-1.19 MeV for alphas. `"f"` is accepted for `Proton` and `Alpha` only;
+there is no Z-dependent fit for the others.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `particle::Type` : particle type.
+- `energy::Real` : energy of the stopping-power maximum [in MeV].
+- `mode::String` : `"f"`, to select the Z-dependent fit.
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.set_emax(Proton,"f")
+julia> inelastic_collision.set_emax(Alpha,0.9)
+```
+"""
+function set_emax(this::Inelastic_Collision,particle::Type,energy::Real)
+    if !haskey(EMAX_DEFAULTS,particle) error("The stopping-power maximum is undefined for the '$particle' particle. It is defined for $(collect(keys(EMAX_DEFAULTS))).") end
+    if energy ≤ 0 error("The energy of the stopping-power maximum should be positive.") end
+    this.emax[particle] = float(energy)
+end
+
+function set_emax(this::Inelastic_Collision,particle::Type,mode::String)
+    if lowercase(mode) != "f" error("Unknown '$mode' mode for the stopping-power maximum. Give an energy [in MeV], or \"f\" for the Z-dependent fit.") end
+    if particle ∉ [Proton,Alpha] error("The \"f\" mode is only supported for Proton and Alpha; there is no Z-dependent fit for the '$particle' particle.") end
+    this.emax[particle] = "f"
+end
+
+"""
+    get_emax(this::Inelastic_Collision,particle::Type)
+
+To get the energy of the stopping-power maximum of the analytic low-energy extension.
+
+Returns `"f"` unchanged when the Z-dependent fit is selected: the resolved value depends
+on the material and cannot be known here.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `particle::Type` : particle type.
+
+# Output Argument(s)
+- `energy::Union{Float64,String}` : energy of the stopping-power maximum [in MeV], or `"f"`.
+
+# Examples
+```jldoctest
+julia> inelastic_collision = Inelastic_Collision()
+julia> inelastic_collision.get_emax(Proton)
+0.05
+```
+"""
+function get_emax(this::Inelastic_Collision,particle::Type)
+    if !haskey(this.emax,particle) error("The stopping-power maximum is undefined for the '$particle' particle. It is defined for $(collect(keys(EMAX_DEFAULTS))).") end
+    return this.emax[particle]
 end
 
 """
@@ -563,7 +652,8 @@ function sp(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},atz:
     Stot = bethe(Z,ωz,atz,ρ,N_density,Ei,particle,this.density_correction,state_of_matter,I_eff;
         atomic_weights=atomic_weights,
         is_shell_correction=this.is_shell_correction,
-        ecut_MeV=get(this.ecut,typeof(particle),NaN))
+        ecut_MeV=get(this.ecut,typeof(particle),NaN),
+        emax=get(this.emax,typeof(particle),nothing))
 
     # Compute the catastrophic Møller- or Bhabha- derived stopping power
     Sc = 0

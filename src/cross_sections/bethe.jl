@@ -3,6 +3,7 @@
     N_density::Float64,Ei::Float64,particle::Particle,density_correction::String,
     state_of_matter::String,I_eff::Float64;
     atomic_weights::Union{Nothing,Vector{Float64}}=nothing,ecut_MeV::Float64=NaN,
+    emax::Union{Float64,String,Nothing}=nothing,
     is_bethe_correction::Bool=true,is_density_correction::Bool=true,
     is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true)
 
@@ -28,6 +29,9 @@ and heavy ions (proton, muon, alpha particle).
 - `is_barkas::Bool` : boolean to enable or not the Barkas correction.
 - `ecut_MeV::Float64` : energy above which the corrected Bethe formula is used [in MeV];
   NaN ⟹ the per-particle default.
+- `emax::Union{Float64,String,Nothing}` : energy of the stopping-power maximum of the
+  analytic low-energy extension [in MeV]; `nothing` ⟹ the per-particle default, `"f"` ⟹
+  the Z-dependent fit `emax_stopping_maximum`.
 
 # Output Argument(s)
 - `S::Float64` : stopping power.
@@ -38,7 +42,7 @@ and heavy ions (proton, muon, alpha particle).
   particles from the corrected Bethe formula.
 
 """
-function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,N_density::Float64,Ei::Float64,particle::Particle,density_correction::String="fano",state_of_matter::String="solid",I_eff::Float64=NaN; atomic_weights::Union{Nothing,Vector{Float64}}=nothing,is_bethe_correction::Bool=true,is_density_correction::Bool=true,is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true,ecut_MeV::Float64=NaN)
+function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,N_density::Float64,Ei::Float64,particle::Particle,density_correction::String="fano",state_of_matter::String="solid",I_eff::Float64=NaN; atomic_weights::Union{Nothing,Vector{Float64}}=nothing,is_bethe_correction::Bool=true,is_density_correction::Bool=true,is_shell_correction::Bool=true,is_lindhard_sorensen::Bool=true,is_barkas::Bool=true,ecut_MeV::Float64=NaN,emax::Union{Float64,String,Nothing}=nothing)
 
     #----
     # Set the minimum energy cutoff over which the corrected Bethe formula is valid.
@@ -60,9 +64,12 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         error("Unknown particle.")
     end
 
-    # A user-supplied cutoff overrides the default. Emax is left alone: it is read only
-    # by the analytic low-energy extension and means nothing at or above Ecut.
+    # A user-supplied cutoff overrides the default. Emax is read only by the analytic
+    # low-energy extension and means nothing at or above Ecut, so nothing there changes.
     if !isnan(ecut_MeV) Ecut = ecut_MeV/mₑ end
+    if !isnothing(emax)
+        Emax = (emax isa String) ? emax_stopping_maximum(Z,atz,particle)/mₑ : emax/mₑ
+    end
 
     #----
     # Corrected Bethe formula
