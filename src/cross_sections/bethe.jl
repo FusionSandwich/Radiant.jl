@@ -131,7 +131,6 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         #----
         # Effective electron density and ionization energy
         #----
-        element_atomic_weights = isnothing(atomic_weights) ? standard_atomic_weight.(Z) : atomic_weights
         𝒩ₑ_eff = N_density * sum(atz .* Z) # (in cm⁻³)
         I = effective_mean_excitation_energy(Z,ωz,I_eff) # (in mₑc²)
 
@@ -157,7 +156,7 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         #----
         δF = 0
         if is_density_correction
-            δF = fermi_density_effect(Z,ωz,atz,ρ,Ei,state_of_matter,density_correction,ratio_mass,I; atomic_weights=atomic_weights)
+            δF = fermi_density_effect(Z,atz,𝒩ₑ_eff,Ei,state_of_matter,density_correction,ratio_mass,I)
         end
 
         #----
@@ -203,7 +202,7 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         #----
         ΔL_B = 0
         if is_barkas && is_heavy
-            ΔL_B = barkas_correction(Z,ωz,atz,ρ,γ,particle,I; atomic_weights=atomic_weights)
+            ΔL_B = barkas_correction(Z,atz,𝒩ₑ_eff,γ,particle,I)
         end
 
         #----
@@ -355,16 +354,17 @@ function shell_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Floa
 end
 
 """
-    barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},
-    ρ::Float64,γ::Float64,particle::Particle,I::Float64)
+    barkas_correction(Z::Vector{Int64},atz::Vector{Float64},𝒩ₑ_eff::Float64,
+    γ::Float64,particle::Particle,I::Float64)
 
 Gives the Barkas correction to the Bethe formula.
 
 # Input Argument(s)
 - `Z::Vector{Int64}` : atomic numbers of the elements in the material.
-- `ωz::Vector{Float64}` : weight fraction of the elements composing the material.
 - `atz::Vector{Float64}` : atomic fraction of the elements composing the material.
-- `ρ::Float64` : material density.
+- `𝒩ₑ_eff::Float64` : effective electron density of the material [in cm⁻³], already
+  built by the caller, so that the Bethe bracket and the plasma energy cannot drift
+  apart.
 - `γ::Float64` : total energy of the incoming particle in unit of its rest energy.
 - `particle::Particle` : incoming particle.
 - `I::Float64` : mean excitation energy of the material [in mₑc²], already resolved by the
@@ -380,7 +380,7 @@ Gives the Barkas correction to the Bethe formula.
   particles from the corrected Bethe formula.
 
 """
-function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,γ::Float64,particle::Particle,I::Float64; atomic_weights::Union{Nothing,Vector{Float64}}=nothing)
+function barkas_correction(Z::Vector{Int64},atz::Vector{Float64},𝒩ₑ_eff::Float64,γ::Float64,particle::Particle,I::Float64)
 
     #----
     # Initialization
@@ -395,7 +395,7 @@ function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Flo
     Zbar = sum(atz .* Z)
     CB = max(1,Zbar/10)
     charge = get_charge(particle)
-    Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
+    Ωp = plasma_energy(𝒩ₑ_eff)
 
     #----
     # Extract the subshell of all atoms of the compound

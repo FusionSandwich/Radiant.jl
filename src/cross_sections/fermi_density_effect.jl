@@ -1,15 +1,16 @@
 """
-    fermi_density_effect(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},
-    ρ::Float64,Ei::Float64,state_of_matter::String,type::String,ratio_mass::Float64,
-    I::Float64)
+    fermi_density_effect(Z::Vector{Int64},atz::Vector{Float64},𝒩ₑ_eff::Float64,
+    Ei::Float64,state_of_matter::String,type::String,ratio_mass::Float64,I::Float64)
 
 Compute the Fermi density effect correction.
 
 # Input Argument(s)
 - `Z::Vector{Int64}`: atomic number of the element(s) composing the material.
-- `ωz::Vector{Float64}`: weight fraction of the element(s) composing the material.
 - `atz::Vector{Float64}`: atomic fraction of the elements composing the material.
-- `ρ::Float64`: density of the material [in g/cm³].
+- `𝒩ₑ_eff::Float64`: effective electron density of the material [in cm⁻³], already built
+  by the caller. Passing it in rather than rebuilding it from the composition keeps one
+  definition of the electron density: the Bethe bracket and the plasma energy cannot
+  drift apart.
 - `Ei::Float64`: energy of the incoming particle [in mₑc²].
 - `type::String`: type of calculation.
 - `ratio_mass::Float64`: mass of the incoming particle in unit of the electron mass.
@@ -27,17 +28,16 @@ Compute the Fermi density effect correction.
   Cross-Section Generating Code.
 
 """
-function fermi_density_effect(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,Ei::Float64,state_of_matter::String,type::String,ratio_mass::Float64,I::Float64; atomic_weights::Union{Nothing,Vector{Float64}}=nothing)
+function fermi_density_effect(Z::Vector{Int64},atz::Vector{Float64},𝒩ₑ_eff::Float64,Ei::Float64,state_of_matter::String,type::String,ratio_mass::Float64,I::Float64)
 
 if type == "fano"
 
     # Initialization
     γ = (Ei + ratio_mass)/ratio_mass
     β² = (γ^2-1)/γ^2
-    Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
+    Ωp = plasma_energy(𝒩ₑ_eff)
 
-    # Mean atomic number per atom. Atom fractions sum to unity, so this is also the number
-    # of electrons on an average atom of the material.
+    # Mean electron number per atom.
     Zbar = sum(atz .* Z)
 
     # Extract the subshell of all atoms of the compound
@@ -68,7 +68,7 @@ if type == "fano"
 elseif type == "sternheimer"
 
     mₑc² = 0.510999
-    Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
+    Ωp = plasma_energy(𝒩ₑ_eff)
 
     C = -2*log(I/Ωp) - 1
     # X = log10(βγ) = log10(p/Mc), momentum in units of the incident particle's own
