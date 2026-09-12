@@ -33,17 +33,22 @@ if type == "fano"
     Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
     I = effective_mean_excitation_energy(Z,ωz,I_eff)
 
-    # Electron fraction of each element, Σⱼ nⱼZⱼ / Z with Z = Σⱼ nⱼZⱼ. δF is an average
-    # of the oscillator-strength distribution over the electrons of the material, so the
-    # subshell occupancies below are weighted per electron and Zi sums to unity.
-    g = atz .* Z ./ sum(atz .* Z)
+    # Mean atomic number per atom. Atom fractions sum to unity, so this is also the number
+    # of electrons on an average atom of the material.
+    Zbar = sum(atz .* Z)
 
     # Extract the subshell of all atoms of the compound
     Zi = zeros(0); Ui = zeros(0); Wi = zeros(0); Nz = length(Z)
     for i in range(1,Nz)
         _,Ze,Ue,_,_,_ = electron_subshells(Z[i])
         We = resonance_energy(Z[i],Ωp,I)
-        append!(Zi,(g[i]/Z[i]).*Ze)
+        # Fraction of the material's electrons living in each subshell: the occupancy per
+        # average atom, atz[i]*Ze, over the electrons per average atom. δF is an average of
+        # the oscillator-strength distribution over the electrons of the material [Salvat
+        # (2022) Eq. (59)], so this is the weight it asks for, and Zi sums to unity.
+        # Equivalently gᵢ/Zᵢ with gᵢ = atzᵢZᵢ/Zbar the electron fraction of element i, but
+        # the Zᵢ cancels and is not worth writing.
+        append!(Zi,(atz[i]/Zbar).*Ze)
         append!(Ui,Ue)
         append!(Wi,We)
     end

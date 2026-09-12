@@ -387,14 +387,10 @@ function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Flo
     Nz = length(Z)
 
     # SBETHE Eq. (54): CB = max{1, Z̄/10} with Z̄ = Z(Σⱼnⱼ)⁻¹, the mean atomic number
-    # per atom. Atom fractions sum to unity, so Z̄ is their Z-weighted sum.
+    # per atom. Atom fractions sum to unity, so Z̄ is their Z-weighted sum, which is also
+    # the number of electrons on an average atom of the material.
     Zbar = sum(atz .* Z)
     CB = max(1,Zbar/10)
-
-    # Electron fraction of each element, SBETHE Eq. (53). Each ΔLBⱼ already carries
-    # its own 1/Zⱼ, so Zi holds gⱼ/Zⱼ times the subshell occupancies and sums to gⱼ
-    # over the subshells of element j.
-    g = atz .* Z ./ Zbar
     charge = get_charge(particle)
     Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
     I = effective_mean_excitation_energy(Z,ωz)
@@ -406,7 +402,12 @@ function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Flo
     for iz in range(1,Nz)
         _,Ze,Ue,_,_,_ = electron_subshells(Z[iz])
         We = resonance_energy(Z[iz],Ωp,I)
-        append!(Zi,(g[iz]/Z[iz]).*Ze)
+        # Fraction of the material's electrons living in each subshell: the occupancy
+        # per average atom, atz[iz]*Ze, over the electrons per average atom. Everything
+        # inside the Bethe bracket multiplies 𝒩ₑ_eff, so every term in it must be per
+        # electron. This is SBETHE Eq. (53), whose per-element electron fraction gⱼ would
+        # be atzⱼZⱼ/Zbar -- but each ΔLBⱼ already carries its own 1/Zⱼ, and the Zⱼ cancels.
+        append!(Zi,(atz[iz]/Zbar).*Ze)
         append!(Ui,Ue)
         append!(Wi,We)
     end
