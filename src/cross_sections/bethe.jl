@@ -164,7 +164,7 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         #----
         Cz = 0
         if is_shell_correction
-            Cz = shell_correction(Z,ωz,atz,γ,particle)
+            Cz = shell_correction(Z,atz,γ,particle)
         end
 
         #----
@@ -256,16 +256,13 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
 end
 
 """
-    shell_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},γi::Float64,
-    particle::Particle)
+    shell_correction(Z::Vector{Int64},atz::Vector{Float64},γi::Float64,particle::Particle)
 
 Gives the shell correction to the Bethe formula.
 
 # Input Argument(s)
 - `Z::Vector{Int64}` : atomic numbers of the elements in the material.
-- `ωz::Vector{Float64}` : weight fraction of the elements composing the material.
 - `atz::Vector{Float64}` : atomic fraction of the elements composing the material.
-- `ρ::Float64` : material density.
 - `γi::Float64` : total energy of the incoming particle in unit of its rest energy.
 - `particle::Particle` : incoming particle.
 
@@ -278,7 +275,7 @@ Gives the shell correction to the Bethe formula.
   particles from the corrected Bethe formula.
 
 """
-function shell_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},γi::Float64,particle::Particle)
+function shell_correction(Z::Vector{Int64},atz::Vector{Float64},γi::Float64,particle::Particle)
 
     #----
     # Initialization
