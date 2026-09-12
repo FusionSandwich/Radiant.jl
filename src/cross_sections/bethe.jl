@@ -157,7 +157,7 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         #----
         δF = 0
         if is_density_correction
-            δF = fermi_density_effect(Z,ωz,atz,ρ,Ei,state_of_matter,density_correction,ratio_mass,I_eff; atomic_weights=atomic_weights)
+            δF = fermi_density_effect(Z,ωz,atz,ρ,Ei,state_of_matter,density_correction,ratio_mass,I; atomic_weights=atomic_weights)
         end
 
         #----
@@ -203,7 +203,7 @@ function bethe(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Fl
         #----
         ΔL_B = 0
         if is_barkas && is_heavy
-            ΔL_B = barkas_correction(Z,ωz,atz,ρ,γ,particle; atomic_weights=atomic_weights)
+            ΔL_B = barkas_correction(Z,ωz,atz,ρ,γ,particle,I; atomic_weights=atomic_weights)
         end
 
         #----
@@ -356,7 +356,7 @@ end
 
 """
     barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},
-    ρ::Float64,γ::Float64,particle::Particle)
+    ρ::Float64,γ::Float64,particle::Particle,I::Float64)
 
 Gives the Barkas correction to the Bethe formula.
 
@@ -367,6 +367,9 @@ Gives the Barkas correction to the Bethe formula.
 - `ρ::Float64` : material density.
 - `γ::Float64` : total energy of the incoming particle in unit of its rest energy.
 - `particle::Particle` : incoming particle.
+- `I::Float64` : mean excitation energy of the material [in mₑc²], already resolved by the
+  caller. Passing it in is what makes the Barkas term honour a user-set value; resolving it
+  here would silently ignore `set_mean_excitation_energy`.
 
 # Output Argument(s)
 - `ΔLB::Float64` : Barkas correction.
@@ -377,7 +380,7 @@ Gives the Barkas correction to the Bethe formula.
   particles from the corrected Bethe formula.
 
 """
-function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,γ::Float64,particle::Particle; atomic_weights::Union{Nothing,Vector{Float64}}=nothing)
+function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,γ::Float64,particle::Particle,I::Float64; atomic_weights::Union{Nothing,Vector{Float64}}=nothing)
 
     #----
     # Initialization
@@ -393,7 +396,6 @@ function barkas_correction(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Flo
     CB = max(1,Zbar/10)
     charge = get_charge(particle)
     Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
-    I = effective_mean_excitation_energy(Z,ωz)
 
     #----
     # Extract the subshell of all atoms of the compound

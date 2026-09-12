@@ -1,7 +1,7 @@
 """
     fermi_density_effect(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},
     ρ::Float64,Ei::Float64,state_of_matter::String,type::String,ratio_mass::Float64,
-    I_eff::Float64)
+    I::Float64)
 
 Compute the Fermi density effect correction.
 
@@ -12,6 +12,10 @@ Compute the Fermi density effect correction.
 - `ρ::Float64`: density of the material [in g/cm³].
 - `Ei::Float64`: energy of the incoming particle [in mₑc²].
 - `type::String`: type of calculation.
+- `ratio_mass::Float64`: mass of the incoming particle in unit of the electron mass.
+- `I::Float64`: mean excitation energy of the material [in mₑc²], already resolved by the
+  caller. It is passed in rather than looked up here so that every term of the Bethe
+  formula uses one and the same value.
 
 # Output Argument(s)
 - `δF::Float64`: Fermi density effect correction.
@@ -23,7 +27,7 @@ Compute the Fermi density effect correction.
   Cross-Section Generating Code.
 
 """
-function fermi_density_effect(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,Ei::Float64,state_of_matter::String,type::String,ratio_mass::Float64=1.0,I_eff::Float64=NaN; atomic_weights::Union{Nothing,Vector{Float64}}=nothing)
+function fermi_density_effect(Z::Vector{Int64},ωz::Vector{Float64},atz::Vector{Float64},ρ::Float64,Ei::Float64,state_of_matter::String,type::String,ratio_mass::Float64,I::Float64; atomic_weights::Union{Nothing,Vector{Float64}}=nothing)
 
 if type == "fano"
 
@@ -31,7 +35,6 @@ if type == "fano"
     γ = (Ei + ratio_mass)/ratio_mass
     β² = (γ^2-1)/γ^2
     Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
-    I = effective_mean_excitation_energy(Z,ωz,I_eff)
 
     # Mean atomic number per atom. Atom fractions sum to unity, so this is also the number
     # of electrons on an average atom of the material.
@@ -42,12 +45,6 @@ if type == "fano"
     for i in range(1,Nz)
         _,Ze,Ue,_,_,_ = electron_subshells(Z[i])
         We = resonance_energy(Z[i],Ωp,I)
-        # Fraction of the material's electrons living in each subshell: the occupancy per
-        # average atom, atz[i]*Ze, over the electrons per average atom. δF is an average of
-        # the oscillator-strength distribution over the electrons of the material [Salvat
-        # (2022) Eq. (59)], so this is the weight it asks for, and Zi sums to unity.
-        # Equivalently gᵢ/Zᵢ with gᵢ = atzᵢZᵢ/Zbar the electron fraction of element i, but
-        # the Zᵢ cancels and is not worth writing.
         append!(Zi,(atz[i]/Zbar).*Ze)
         append!(Ui,Ue)
         append!(Wi,We)
@@ -71,7 +68,6 @@ if type == "fano"
 elseif type == "sternheimer"
 
     mₑc² = 0.510999
-    I = effective_mean_excitation_energy(Z,ωz,I_eff)
     Ωp = plasma_energy(Z,ωz,ρ; atomic_weights=atomic_weights)
 
     C = -2*log(I/Ωp) - 1
