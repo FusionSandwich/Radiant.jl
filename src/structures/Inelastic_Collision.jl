@@ -916,8 +916,8 @@ function sp(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},atz:
     Stot = bethe(Z,ωz,atz,ρ,N_density,Ei,particle,this.density_correction,state_of_matter,I_eff;
         atomic_weights=atomic_weights,
         is_shell_correction=this.is_shell_correction,
-        ecut=get(this.ecut,typeof(particle),NaN),
-        emax=get(this.emax,typeof(particle),nothing),
+        ecut=get(this.ecut,get_type(particle),NaN),
+        emax=get(this.emax,get_type(particle),nothing),
         low_energy_model=this.low_energy_model,
         low_energy_source=this.low_energy_source,
         is_bragg_additivity=this.is_bragg_additivity)
