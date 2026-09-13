@@ -32,8 +32,9 @@ mutable struct Inelastic_Collision <: Interaction
     is_distant_collision::Bool
     density_correction::String
     scattering_model::String
-    ecut::Dict{Type,Float64}
-    emax::Dict{Type,Union{Float64,String}}
+    user_ecut::Dict{Type,Float64}
+    user_emax::Dict{Type,Float64}
+    user_emax_fit::Set{Type}
     low_energy_model::String
     low_energy_source::String
     is_bragg_additivity::Bool
@@ -46,13 +47,6 @@ mutable struct Inelastic_Collision <: Interaction
         this.incoming_particle = unique([t[1] for t in collect(keys(this.interaction_types))])
         this.interaction_particles = unique([t[2] for t in collect(keys(this.interaction_types))])
         this.set_density_correction("fano")
-        this.ecut = Dict{Type,Float64}()
-        for (p,e) in ECUT_DEFAULTS this.set_ecut(p,e) end
-        this.emax = Dict{Type,Union{Float64,String}}()
-        for (p,e) in EMAX_DEFAULTS this.set_emax(p,e) end
-        this.set_low_energy_model("analytic")
-        this.set_low_energy_source("srim")
-        this.set_is_bragg_additivity(false)
         this.is_CSD = true
         this.is_AFP = true
         this.is_AFP_decomposition = false
@@ -62,6 +56,13 @@ mutable struct Inelastic_Collision <: Interaction
         this.set_is_subshells_dependant(true)
         this.set_is_shell_correction(true)
         this.set_scattering_model("BFP")
+        this.user_ecut = Dict{Type,Float64}()
+        this.user_emax = Dict{Type,Float64}()
+        this.user_emax_fit = Set{Type}()
+        this.set_low_energy_model("analytic")
+        this.set_low_energy_source("srim")
+        this.set_is_bragg_additivity(false)
+
         return this
     end
 end
@@ -120,18 +121,74 @@ function set_density_correction(this::Inelastic_Collision,density_correction::St
 end
 
 """
-    ECUT_DEFAULTS
+    set_is_shell_correction(this::Inelastic_Collision,is_shell_correction::Bool)
 
-Default energy below which `bethe` leaves the corrected Bethe formula for its low-energy
-branch, per particle [in MeV]. These are the values `bethe` used before `set_ecut` existed.
+Activate or desactivate shell correction for stopping powers.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `is_shell_correction::Bool` : activate (true) or desactivate (false) the shell correction.
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> elastic_collision = Inelastic_Collision()
+julia> elastic_collision.set_is_shell_correction(false)
+```
+"""
+function set_is_shell_correction(this::Inelastic_Collision,is_shell_correction::Bool)
+    this.is_shell_correction = is_shell_correction
+end
 
 """
-const ECUT_DEFAULTS = Dict{Type,Float64}(
-    Electron => 0.001, Positron => 0.001,
-    Muon     => 0.15,  Antimuon => 0.15,
-    Proton   => 0.75,  Antiproton => 0.75,
-    Alpha    => 5.0
-)
+    set_is_subshells_dependant(this::Inelastic_Collision,is_subshells_dependant::Bool)
+
+Compute the inelastic cross-sections assuming bounded or unbounded electrons.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `is_subshells_dependant::Bool` : bounded (true) or unbounded (false) electrons.
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> elastic_collision = Inelastic_Collision()
+julia> elastic_collision.set_is_subshells_dependant(false)
+```
+"""
+function set_is_subshells_dependant(this::Inelastic_Collision,is_subshells_dependant::Bool)
+    this.is_subshells_dependant = is_subshells_dependant
+end
+
+"""
+    scattering_model(this::Inelastic_Collision,scattering_model::String)
+
+To define the solver for inelastic scattering.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic structure.
+- `solver::String` : solver for inelastic scattering, which can be:
+    - `BFP` : Boltzmann Fokker-Planck solver.
+    - `FP` : Fokker-Planck solver.
+    - `BTE` : Boltzmann solver.
+
+# Output Argument(s)
+N/A
+
+# Examples
+```jldoctest
+julia> elastic_collision = Inelastic_Collision()
+julia> elastic_collision.set_scattering_model("FP")
+```
+"""
+function set_scattering_model(this::Inelastic_Collision,scattering_model::String)
+    if uppercase(scattering_model) ∉ ["BFP","FP","BTE"] error("Unknown scattering model (should be BFP, FP or BTE).") end
+    this.scattering_model = uppercase(scattering_model)
+end
 
 """
     set_ecut(this::Inelastic_Collision,particle::Type,energy::Real)
@@ -161,13 +218,14 @@ julia> inelastic_collision.set_ecut(Proton,1.0)
 function set_ecut(this::Inelastic_Collision,particle::Type,energy::Real)
     if !haskey(ECUT_DEFAULTS,particle) error("The cutoff energy is undefined for the '$particle' particle. It is defined for $(collect(keys(ECUT_DEFAULTS))).") end
     if energy ≤ 0 error("The cutoff energy should be positive.") end
-    this.ecut[particle] = float(energy)
+    this.user_ecut[particle] = float(energy)
 end
 
 """
     get_ecut(this::Inelastic_Collision,particle::Type)
 
-To get the energy above which the corrected Bethe formula is used for a given particle.
+To get the energy above which the corrected Bethe formula is used for a given particle:
+the value `set_ecut` stored, or `ECUT_DEFAULTS[particle]` if none was set.
 
 # Input Argument(s)
 - `this::Inelastic_Collision` : inelastic collision structure.
@@ -184,23 +242,9 @@ julia> inelastic_collision.get_ecut(Proton)
 ```
 """
 function get_ecut(this::Inelastic_Collision,particle::Type)
-    if !haskey(this.ecut,particle) error("The cutoff energy is undefined for the '$particle' particle. It is defined for $(collect(keys(ECUT_DEFAULTS))).") end
-    return this.ecut[particle]
+    if !haskey(ECUT_DEFAULTS,particle) error("The cutoff energy is undefined for the '$particle' particle. It is defined for $(collect(keys(ECUT_DEFAULTS))).") end
+    return get(this.user_ecut,particle,ECUT_DEFAULTS[particle])
 end
-
-"""
-    EMAX_DEFAULTS
-
-Default energy of the stopping-power maximum used by the analytic low-energy extension,
-per particle [in MeV]. These are the values `bethe` used before `set_emax` existed.
-
-"""
-const EMAX_DEFAULTS = Dict{Type,Union{Float64,String}}(
-    Electron => 0.0001, Positron => 0.0001,
-    Muon     => 0.02,   Antimuon => 0.02,
-    Proton   => 0.05,   Antiproton => 0.05,
-    Alpha    => 0.8
-)
 
 """
     set_emax(this::Inelastic_Collision,particle::Type,energy::Real)
@@ -238,13 +282,15 @@ julia> inelastic_collision.set_emax(Alpha,0.9)
 function set_emax(this::Inelastic_Collision,particle::Type,energy::Real)
     if !haskey(EMAX_DEFAULTS,particle) error("The stopping-power maximum is undefined for the '$particle' particle. It is defined for $(collect(keys(EMAX_DEFAULTS))).") end
     if energy ≤ 0 error("The energy of the stopping-power maximum should be positive.") end
-    this.emax[particle] = float(energy)
+    delete!(this.user_emax_fit,particle)
+    this.user_emax[particle] = float(energy)
 end
 
 function set_emax(this::Inelastic_Collision,particle::Type,mode::String)
     if lowercase(mode) != "f" error("Unknown '$mode' mode for the stopping-power maximum. Give an energy [in MeV], or \"f\" for the Z-dependent fit.") end
     if particle ∉ [Proton,Alpha] error("The \"f\" mode is only supported for Proton and Alpha; there is no Z-dependent fit for the '$particle' particle.") end
-    this.emax[particle] = "f"
+    delete!(this.user_emax,particle)
+    push!(this.user_emax_fit,particle)
 end
 
 """
@@ -252,8 +298,9 @@ end
 
 To get the energy of the stopping-power maximum of the analytic low-energy extension.
 
-Returns `"f"` unchanged when the Z-dependent fit is selected: the resolved value depends
-on the material and cannot be known here.
+Gives the value `set_emax` stored, or `EMAX_DEFAULTS[particle]` if none was set. Returns
+`"f"` unchanged when the Z-dependent fit is selected: the resolved value depends on the
+material and cannot be known here.
 
 # Input Argument(s)
 - `this::Inelastic_Collision` : inelastic collision structure.
@@ -270,8 +317,9 @@ julia> inelastic_collision.get_emax(Proton)
 ```
 """
 function get_emax(this::Inelastic_Collision,particle::Type)
-    if !haskey(this.emax,particle) error("The stopping-power maximum is undefined for the '$particle' particle. It is defined for $(collect(keys(EMAX_DEFAULTS))).") end
-    return this.emax[particle]
+    if !haskey(EMAX_DEFAULTS,particle) error("The stopping-power maximum is undefined for the '$particle' particle. It is defined for $(collect(keys(EMAX_DEFAULTS))).") end
+    if particle in this.user_emax_fit return "f" end
+    return get(this.user_emax,particle,EMAX_DEFAULTS[particle])
 end
 
 """
@@ -530,76 +578,6 @@ false
 """
 function get_is_bragg_additivity(this::Inelastic_Collision)
     return this.is_bragg_additivity
-end
-
-"""
-    set_is_shell_correction(this::Inelastic_Collision,is_shell_correction::Bool)
-
-Activate or desactivate shell correction for stopping powers.
-
-# Input Argument(s)
-- `this::Inelastic_Collision` : inelastic collision structure.
-- `is_shell_correction::Bool` : activate (true) or desactivate (false) the shell correction.
-
-# Output Argument(s)
-N/A
-
-# Examples
-```jldoctest
-julia> elastic_collision = Inelastic_Collision()
-julia> elastic_collision.set_is_shell_correction(false)
-```
-"""
-function set_is_shell_correction(this::Inelastic_Collision,is_shell_correction::Bool)
-    this.is_shell_correction = is_shell_correction
-end
-
-"""
-    set_is_subshells_dependant(this::Inelastic_Collision,is_subshells_dependant::Bool)
-
-Compute the inelastic cross-sections assuming bounded or unbounded electrons.
-
-# Input Argument(s)
-- `this::Inelastic_Collision` : inelastic collision structure.
-- `is_subshells_dependant::Bool` : bounded (true) or unbounded (false) electrons.
-
-# Output Argument(s)
-N/A
-
-# Examples
-```jldoctest
-julia> elastic_collision = Inelastic_Collision()
-julia> elastic_collision.set_is_subshells_dependant(false)
-```
-"""
-function set_is_subshells_dependant(this::Inelastic_Collision,is_subshells_dependant::Bool)
-    this.is_subshells_dependant = is_subshells_dependant
-end
-
-"""
-    scattering_model(this::Inelastic_Collision,scattering_model::String)
-
-To define the solver for inelastic scattering.
-
-# Input Argument(s)
-- `this::Inelastic_Collision` : inelastic structure.
-- `solver::String` : solver for inelastic scattering, which can be:
-    - `BFP` : Boltzmann Fokker-Planck solver.
-    - `FP` : Fokker-Planck solver.
-    - `BTE` : Boltzmann solver.
-
-# Output Argument(s)
-N/A
-
-# Examples
-```jldoctest
-julia> elastic_collision = Inelastic_Collision()
-julia> elastic_collision.set_scattering_model("FP")
-```
-"""
-function set_scattering_model(this::Inelastic_Collision,scattering_model::String)
-    if uppercase(scattering_model) ∉ ["BFP","FP","BTE"] error("Unknown scattering model (should be BFP, FP or BTE).") end
-    this.scattering_model = uppercase(scattering_model)
 end
 
 """
@@ -916,8 +894,9 @@ function sp(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},atz:
     Stot = bethe(Z,ωz,atz,ρ,N_density,Ei,particle,this.density_correction,state_of_matter,I_eff;
         atomic_weights=atomic_weights,
         is_shell_correction=this.is_shell_correction,
-        ecut=get(this.ecut,get_type(particle),NaN),
-        emax=get(this.emax,get_type(particle),nothing),
+        user_ecut=get(this.user_ecut,get_type(particle),NaN),
+        user_emax=get(this.user_emax,get_type(particle),NaN),
+        is_emax_fit=(get_type(particle) in this.user_emax_fit),
         low_energy_model=this.low_energy_model,
         low_energy_source=this.low_energy_source,
         is_bragg_additivity=this.is_bragg_additivity)
