@@ -4,7 +4,7 @@
 
 The isolated branch `JS/radianthts-full-proton-modeling-20260925` starts from verified Radiant `4f7f83937fcd23ffeff195bf75ceaa2c2e22c6d6`. `test/proton_native_tests.jl` constructs `Proton()` and an explicitly normalized `Anisotropic_Volume_Source`, binds two manufactured material tables through `Cross_Sections.build`, builds two native Cartesian layers, selects `SN` CSD or BFP, and runs `Computation_Unit.run` with zero and nonzero magnetic fields. The BFP case exercises a manufactured angular-variance moment. It scores electronic deposition and nuclear-stopping recoil energy separately; the native process sum agrees with the native total deposition score. The physical classification remains **software verification only**.
 
-The generic core extension is the `provided` multigroup builder plus a transport preflight hook in `Cross_Sections`. `Proton_Native_Binding.jl` populates native group and response structures from exact-domain tables. `transport.jl` invokes the guard on every native solve, including a direct `Computation_Unit.run`, so absent or nonzero unconnected nonelastic physics cannot be silently zeroed. The guard also compares table snapshots to detect mutation after binding. Candidate/qualified tables require a matching local SHA-256 artifact. `Geometry.build` now records a successful build so explicit source projection can run. The magnetic operator receives the transported particle rest mass instead of always using the electron value.
+The generic core extension is the `provided` multigroup builder plus a transport preflight hook in `Cross_Sections`. `Proton_Native_Binding.jl` populates native group and response structures from exact-domain tables. `transport.jl` invokes the guard on every native solve, including a direct `Computation_Unit.run`, so absent or nonzero unconnected nonelastic physics cannot be silently zeroed. The guard compares input, table and built multigroup-library snapshots to detect mutation after binding. Candidate/qualified tables require a matching local SHA-256 artifact. `Geometry.build` now records a successful build so explicit source projection can run. The magnetic operator receives the transported particle rest mass instead of always using the electron value.
 
 ## Exact breaks found and fixed
 
@@ -24,8 +24,9 @@ The generic core extension is the `provided` multigroup builder plus a transport
 
 ## Validation receipts
 
-- Julia 1.10.12, offline existing depot and local 11,601-byte manifest: `C:\rhts-sandbox\julia\julia-1.10.12\bin\julia.exe --startup-file=no --compiled-modules=no --project=. test\runtests.jl` **339/339 assertions passed** (293 inherited/HTS start, 46 new proton native tests).
-- Julia 1.6.7, offline existing depot and local 9,678-byte manifest: `C:\rhts-sandbox\julia\julia-1.6.7\bin\julia.exe --startup-file=no --compiled-modules=no --project=. test\runtests.jl` **339/339 assertions passed**.
+- Julia 1.10.12, offline existing depot and local 11,601-byte manifest: `C:\rhts-sandbox\julia\julia-1.10.12\bin\julia.exe --startup-file=no --compiled-modules=no --project=. test\runtests.jl` **357/357 assertions passed** (293 inherited/HTS start, 46 original proton native tests, 18 new integration tests).
+- Julia 1.6.7, offline existing depot and local 9,678-byte manifest: `C:\rhts-sandbox\julia\julia-1.6.7\bin\julia.exe --startup-file=no --compiled-modules=no --project=. test\runtests.jl` **357/357 assertions passed**.
+- `PROTON_INTEGRATION_VALIDATION.md` records the two-group and layer checks, mutation-guard fix, and public upstream documentation comparison.
 - JSON gate and coverage files parse with Python; `git diff --check` has no whitespace errors. Physical reference gates remain unrun and failed closed.
 
 No runtime was downloaded. `Manifest.toml` in this isolated worktree was ignored and copied from local versioned manifests, one Julia version at a time; it was removed after validation. No SSH, job, PR, merge, push or ASC/poster write was performed. The authoritative DPA, Radiant and Para worktrees were used read-only and verified clean at their recorded HEADs. No ASC poster path was accessed.

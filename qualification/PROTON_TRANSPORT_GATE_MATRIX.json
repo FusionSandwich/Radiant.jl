@@ -34,8 +34,8 @@
     {"id":"uncertainty_covariance_provenance","status":"BLOCKED_INPUT","evidence":"Proton_Material_Data binds hash and status; no qualified covariance/model discrepancy"},
     {"id":"material_process_1_500_MeV_coverage","status":"BLOCKED_INPUT","evidence":"DPA PROTON_CROSS_SECTION_COVERAGE.json qualified_material_energy_cells=0; TENDL-2025 main evaluations stop at 200 MeV"},
     {"id":"independent_benchmark_comparisons","status":"BLOCKED_INPUT","evidence":"NIST PSTAR/EXFOR candidates; DPA stopping and multiple-scattering benchmark physical rows=0"},
-    {"id":"julia_1_10_regression","status":"SOFTWARE_VERIFIED_SYNTHETIC","evidence":"Julia 1.10.12 full test/runtests.jl: 339/339 assertions, including 46 native manufactured proton assertions"},
-    {"id":"julia_1_6_regression","status":"SOFTWARE_VERIFIED_SYNTHETIC","evidence":"Julia 1.6.7 full test/runtests.jl: 339/339 assertions, including 46 native manufactured proton assertions"},
+    {"id":"julia_1_10_regression","status":"SOFTWARE_VERIFIED_SYNTHETIC","evidence":"Julia 1.10.12 full test/runtests.jl: 357/357 assertions, including 46 native manufactured proton and 18 new repository integration assertions"},
+    {"id":"julia_1_6_regression","status":"SOFTWARE_VERIFIED_SYNTHETIC","evidence":"Julia 1.6.7 full test/runtests.jl: 357/357 assertions, including 46 native manufactured proton and 18 new repository integration assertions"},
     {"id":"post_ASC_non_interference","status":"SOFTWARE_VERIFIED_SYNTHETIC","evidence":"New isolated C:\\rhts-proton\\radiant worktree; authoritative Radiant, DPA and Para worktrees verified clean at recorded HEADs; no ASC poster path accessed"},
     {"id":"pollination_downstream_application","status":"OUT_OF_SCOPE","evidence":"Term is ambiguous; only qualified proton source, scores and uncertainty interfaces are future inputs"}
   ]

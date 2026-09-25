@@ -3,19 +3,21 @@ using TOML
 
 function _manufactured_proton_case(;nuclear_stopping=0.0,angular_variance=0.0,
     nonelastic_removal=0.0,field_T=0.0,solver_type="CSD",
-    qualification_mode=:software)
+    qualification_mode=:software,electronic_stopping_by_layer=(2.0,2.0),
+    group_boundaries_MeV=[500.0,1.0],source_values=[1.0],
+    source_rate_per_s=1.0)
     proton = Proton()
     materials = Material[]
     tables = Proton_Material_Data[]
     nonelastic = Proton_Nonelastic_Data[]
-    for id in ("manufactured-front","manufactured-back")
+    for (layer,id) in enumerate(("manufactured-front","manufactured-back"))
         material = Material(id)
         Radiant.set_density(material,1.0)
         push!(materials,material)
         hash = bytes2hex(sha256("$id/stopping/linear/1-500"))
         model = Tabulated_Ion_Transport_Model(
             species_id="proton",material_id=id,energy_MeV=[1.0,500.0],
-            electronic_stopping_MeV_cm=[2.0,2.0],
+            electronic_stopping_MeV_cm=fill(electronic_stopping_by_layer[layer],2),
             nuclear_stopping_MeV_cm=[nuclear_stopping,nuclear_stopping],
             energy_straggling_variance_MeV2_cm=[0.0,0.0],
             angular_variance_rad2_cm=[angular_variance,angular_variance],
@@ -32,7 +34,7 @@ function _manufactured_proton_case(;nuclear_stopping=0.0,angular_variance=0.0,
             source_sha256=event_hash,qualification_status=:synthetic,
         ))
     end
-    binding = bind_proton_native(proton,tables,nonelastic,[500.0,1.0];
+    binding = bind_proton_native(proton,tables,nonelastic,group_boundaries_MeV;
         qualification_mode=qualification_mode)
     cs = binding.cross_sections
     Radiant.build(cs)
@@ -64,13 +66,13 @@ function _manufactured_proton_case(;nuclear_stopping=0.0,angular_variance=0.0,
     Radiant.add_solver(solvers,solver)
 
     normalization = Source_Normalization(
-        basis=:per_source_particle,source_rate_per_s=1.0,
+        basis=:per_source_particle,source_rate_per_s=source_rate_per_s,
         source_hash=bytes2hex(sha256("manufactured-proton-source")),
         provenance=Dict("classification" => "SOFTWARE_VERIFIED_SYNTHETIC"),
     )
     source = Anisotropic_Volume_Source(
-        proton,[1],[1.0],[1.0e6,500.0e6],:isotropic,
-        reshape([1.0],1,1,1),normalization,
+        proton,[1],[1.0],reverse(group_boundaries_MeV).*1.0e6,:isotropic,
+        reshape(Float64.(source_values),1,length(source_values),1),normalization,
     )
     sources = Fixed_Sources(cs,geometry,solvers)
     Radiant.add_source(sources,source)
@@ -197,4 +199,64 @@ end
     cu_mutated,binding_mutated,_ = _manufactured_proton_case()
     binding_mutated.material_data[1].model.electronic_stopping_MeV_cm[1] = 3.0
     @test_throws ErrorException Radiant.run(cu_mutated)
+end
+
+@testset "Proton native repository integration" begin
+    boundaries = [500.0,250.0,1.0]
+    cu,binding,proton = _manufactured_proton_case(
+        electronic_stopping_by_layer=(2.0,4.0),
+        group_boundaries_MeV=boundaries,source_values=[0.0,1.0],
+    )
+    @test Radiant.get_number_of_groups(binding.cross_sections,proton) == 2
+    @test Radiant.get_stopping_powers(binding.cross_sections,proton) ==
+        [2.0 4.0; 2.0 4.0]
+    Radiant.run(cu)
+    @test get_projection_receipts(cu.sources)[1].energy_group_map == [2,1]
+    flux = Radiant.get_flux(cu,proton)
+    @test size(flux,1) == 2 && all(isfinite,flux)
+    score = score_process_responses(binding.cross_sections,cu.geometry,cu.solvers,
+        cu.sources,cu.flux,proton;quantity="energy-deposition")
+    @test score.total[1,1,1] ≈ 2.0*sum(flux[:,1])
+    @test score.total[2,1,1] ≈ 4.0*sum(flux[:,2])
+    @test vec(score.total) ≈ Radiant.get_energy_deposition(cu,proton)
+    @test all(score.total .> 0.0)
+
+    cu_scaled,binding_scaled,proton_scaled = _manufactured_proton_case(
+        electronic_stopping_by_layer=(2.0,4.0),
+        group_boundaries_MeV=boundaries,source_values=[0.0,3.0],
+    )
+    Radiant.run(cu_scaled)
+    @test Radiant.get_flux(cu_scaled,proton_scaled) ≈ 3.0 .* flux
+    @test Radiant.get_energy_deposition(cu_scaled,proton_scaled) ≈
+        3.0 .* Radiant.get_energy_deposition(cu,proton)
+
+    cu_rate,binding_rate,proton_rate = _manufactured_proton_case(
+        electronic_stopping_by_layer=(2.0,4.0),
+        group_boundaries_MeV=boundaries,source_values=[0.0,1.0],
+        source_rate_per_s=7.0,
+    )
+    Radiant.run(cu_rate)
+    @test Radiant.get_flux(cu_rate,proton_rate) ≈ flux
+    rate_score = score_process_responses(binding_rate.cross_sections,cu_rate.geometry,
+        cu_rate.solvers,cu_rate.sources,cu_rate.flux,proton_rate;
+        quantity="energy-deposition",
+        physical_normalization=get_source_normalization(cu_rate.sources))
+    @test rate_score.total ≈ 7.0 .* score.total
+    @test rate_score.normalization_basis == :physical_rate
+
+    cu_nonelastic,binding_nonelastic,_ = _manufactured_proton_case()
+    binding_nonelastic.nonelastic_data[1].removal_cm_inv[1] = 0.1
+    @test_throws ErrorException Radiant.run(cu_nonelastic)
+    cu_density,binding_density,_ = _manufactured_proton_case()
+    Radiant.set_density(binding_density.material_data[1].material,2.0)
+    @test_throws ErrorException Radiant.run(cu_density)
+    cu_boundaries,binding_boundaries,_ = _manufactured_proton_case()
+    binding_boundaries.cross_sections.energy_boundaries[1][1] = 499.0
+    @test_throws ErrorException Radiant.run(cu_boundaries)
+    cu_dropped,binding_dropped,_ = _manufactured_proton_case()
+    empty!(binding_dropped.nonelastic_data)
+    @test_throws ErrorException Radiant.run(cu_dropped)
+    cu_library,binding_library,_ = _manufactured_proton_case()
+    binding_library.cross_sections.multigroup_cross_sections[1,1].total[1] = 0.1
+    @test_throws ErrorException Radiant.run(cu_library)
 end

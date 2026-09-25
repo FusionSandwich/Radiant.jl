@@ -63,6 +63,33 @@ _proton_nonelastic_snapshot(data) = bytes2hex(sha256(repr((
     data.source_sha256,data.qualification_status,
 ))))
 
+function _proton_binding_input_snapshot(particle,material_data,nonelastic_data,
+    energy_boundaries_MeV,qualification_mode)
+    material_rows = [(get_tag(data.material),data.material_state,data.density_g_cm3,
+        data.interpolation,data.source_sha256,data.source_path,data.uncertainty_status,
+        data.snapshot_sha256) for data in material_data]
+    nonelastic_rows = [(data.material_id,data.source_path,data.snapshot_sha256)
+        for data in nonelastic_data]
+    return bytes2hex(sha256(repr((
+        get_tag(particle),get_type(particle),get_mass(particle),get_charge(particle),
+        material_rows,nonelastic_rows,energy_boundaries_MeV,qualification_mode,
+    ))))
+end
+
+function _proton_library_snapshot(cs::Cross_Sections)
+    ismissing(cs.multigroup_cross_sections) && error("Proton multigroup library is missing.")
+    rows = [(mcs.number_of_groups,mcs.total,mcs.absorption,
+        mcs.boundary_stopping_powers,mcs.stopping_powers,mcs.momentum_transfer,
+        mcs.energy_deposition,mcs.charge_deposition,mcs.scattering,
+        [(key,mcs.response_channels[key]) for key in sort(collect(keys(mcs.response_channels)))])
+        for mcs in cs.multigroup_cross_sections]
+    return bytes2hex(sha256(repr((
+        cs.source,get_tag.(cs.particles),get_tag.(cs.materials),
+        cs.number_of_groups,cs.energy_boundaries,cs.energy,cs.cutoff,
+        size(cs.multigroup_cross_sections),rows,
+    ))))
+end
+
 struct Proton_Nonelastic_Data
     material_id::String
     energy_MeV::Vector{Float64}
@@ -121,6 +148,8 @@ struct Proton_Native_Binding
     nonelastic_data::Vector{Proton_Nonelastic_Data}
     energy_boundaries_MeV::Vector{Float64}
     qualification_mode::Symbol
+    input_snapshot_sha256::String
+    library_snapshot_sha256::Base.RefValue{String}
 end
 
 function _proton_nonelastic_value(data::Proton_Nonelastic_Data,energy_MeV::Float64)
@@ -175,6 +204,7 @@ function _proton_native_group_library(binding::Proton_Native_Binding)
     set_energy(cs,[(boundaries[1]+boundaries[2])/2])
     set_cutoff(cs,[boundaries[end]])
     set_multigroup_cross_sections(cs,library)
+    binding.library_snapshot_sha256[] = _proton_library_snapshot(cs)
     return cs
 end
 
@@ -205,7 +235,9 @@ function bind_proton_native(particle::Particle,material_data::Vector{Proton_Mate
     set_particles(cs,particle)
     set_materials(cs,[data.material for data in material_data])
     binding = Proton_Native_Binding(cs,particle,copy(material_data),copy(nonelastic_data),
-        boundaries,qualification_mode)
+        boundaries,qualification_mode,
+        _proton_binding_input_snapshot(particle,material_data,nonelastic_data,
+            boundaries,qualification_mode),Ref(""))
     set_provided_builder(cs,_ -> _proton_native_group_library(binding))
     set_transport_preflight(cs,(xs,geo,solvers,sources,field) ->
         proton_transport_preflight(binding,xs,geo,solvers,sources,field))
@@ -217,6 +249,13 @@ function proton_transport_preflight(binding::Proton_Native_Binding,cs::Cross_Sec
     geometry::Geometry,solvers::Solvers,sources::Fixed_Sources,
     field::Electromagnetic_Field)
     cs === binding.cross_sections || error("Proton binding was detached from its cross sections.")
+    _proton_binding_input_snapshot(binding.particle,binding.material_data,
+        binding.nonelastic_data,binding.energy_boundaries_MeV,
+        binding.qualification_mode) == binding.input_snapshot_sha256 ||
+        error("Proton binding inputs changed after binding.")
+    !isempty(binding.library_snapshot_sha256[]) &&
+        _proton_library_snapshot(cs) == binding.library_snapshot_sha256[] ||
+        error("Proton multigroup library changed after build.")
     get_energy_boundaries(cs,binding.particle) == binding.energy_boundaries_MeV ||
         error("Proton group boundaries changed after binding.")
     for (data,nonelastic) in zip(binding.material_data,binding.nonelastic_data)
