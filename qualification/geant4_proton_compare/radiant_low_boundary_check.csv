@@ -1,0 +1,2 @@
+energy_MeV,voxels_per_material,lower_energy_groups,Al_edep_MeV,Cu_edep_MeV,source_rate,solve_s,classification,table_sha256,slab_cm,lower_MeV
+1.20000000,64,400,0.00717890148076,0.0167680207671,1,37.197503,PHYSICAL_CANDIDATE,929e06363ccd6f702b95c09cb1354f096dfc150369fadd7ea0ec648929f0cfa9,2e-05,1.1

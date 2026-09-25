@@ -1,0 +1,485 @@
+{
+  "scope": "Al/Cu, 1.2/2/5 MeV, electronic stopping only",
+  "criteria": "exploratory, model-relative thresholds; not measurement validation",
+  "radiant_selected_grid": {
+    "1.2": [
+      64,
+      400
+    ],
+    "2.0": [
+      32,
+      200
+    ],
+    "5.0": [
+      64,
+      400
+    ]
+  },
+  "checks": [
+    {
+      "name": "PSTAR min exit above Radiant lower boundary",
+      "energy_MeV": 1.2,
+      "material": "",
+      "observed": 0.8720414436659802,
+      "limit": 1.0,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic min exit above lower boundary",
+      "energy_MeV": 1.2,
+      "material": "",
+      "observed": 0.8720100479508468,
+      "limit": 1.0,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus shared-table characteristic percent",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 0.08767743918968174,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus independent PSTAR percent",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 0.0874057702416775,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR-fed Radiant versus PSTAR characteristic percent",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 0.08604807738337161,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus Geant4 combined percent/SE",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 0.03633110532310639,
+      "limit": 1,
+      "pass_check": true
+    },
+    {
+      "name": "G4 stopping versus PSTAR percent",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 0.007324553788290444,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR quadrature change percent",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 1.0242545700478445e-06,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic quadrature change percent",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 2.3322366260458693e-08,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 half-step change percent",
+      "energy_MeV": 1.2,
+      "material": "Al",
+      "observed": 0.0054519404417030515,
+      "limit": 0.05,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus shared-table characteristic percent",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 0.18749787015052144,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus independent PSTAR percent",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 0.3187459210003962,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR-fed Radiant versus PSTAR characteristic percent",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 0.1764009651293863,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus Geant4 combined percent/SE",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 0.3036283923576484,
+      "limit": 1,
+      "pass_check": true
+    },
+    {
+      "name": "G4 stopping versus PSTAR percent",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 0.1365773070508891,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR quadrature change percent",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 2.3743221833072425e-06,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic quadrature change percent",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 9.36237753990099e-09,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 half-step change percent",
+      "energy_MeV": 1.2,
+      "material": "Cu",
+      "observed": 0.011362475011589268,
+      "limit": 0.05,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR min exit above Radiant lower boundary",
+      "energy_MeV": 2.0,
+      "material": "",
+      "observed": 0.5246327839807515,
+      "limit": 1.0,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic min exit above lower boundary",
+      "energy_MeV": 2.0,
+      "material": "",
+      "observed": 0.5246427179854182,
+      "limit": 1.0,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus shared-table characteristic percent",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 0.04174468383559837,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus independent PSTAR percent",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 0.0034893964524718157,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR-fed Radiant versus PSTAR characteristic percent",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 0.0433837596654274,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus Geant4 combined percent/SE",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 0.014179859648919267,
+      "limit": 1,
+      "pass_check": true
+    },
+    {
+      "name": "G4 stopping versus PSTAR percent",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 0.04998755560843282,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR quadrature change percent",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 4.261377306580272e-06,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic quadrature change percent",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 2.0673129874637652e-09,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 half-step change percent",
+      "energy_MeV": 2.0,
+      "material": "Al",
+      "observed": 0.005040783573773133,
+      "limit": 0.05,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus shared-table characteristic percent",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 0.06934646893919094,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus independent PSTAR percent",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 0.025270947070765715,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR-fed Radiant versus PSTAR characteristic percent",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 0.06973803559525704,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus Geant4 combined percent/SE",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 0.2033804864533712,
+      "limit": 1,
+      "pass_check": true
+    },
+    {
+      "name": "G4 stopping versus PSTAR percent",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 0.0571771102705565,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR quadrature change percent",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 1.2939227467256842e-07,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic quadrature change percent",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 8.233413950620161e-11,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 half-step change percent",
+      "energy_MeV": 2.0,
+      "material": "Cu",
+      "observed": 0.01115131547304582,
+      "limit": 0.05,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR min exit above Radiant lower boundary",
+      "energy_MeV": 5.0,
+      "material": "",
+      "observed": 0.2082454114654285,
+      "limit": 1.0,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic min exit above lower boundary",
+      "energy_MeV": 5.0,
+      "material": "",
+      "observed": 0.2082262101266545,
+      "limit": 1.0,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus shared-table characteristic percent",
+      "energy_MeV": 5.0,
+      "material": "Al",
+      "observed": 0.00024645664471467654,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus independent PSTAR percent",
+      "energy_MeV": 5.0,
+      "material": "Al",
+      "observed": 0.019490164241342534,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR-fed Radiant versus PSTAR characteristic percent",
+      "energy_MeV": 5.0,
+      "material": "Al",
+      "observed": 0.052740909168003114,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus Geant4 combined percent/SE",
+      "energy_MeV": 5.0,
+      "material": "Al",
+      "observed": 0.06591106788907855,
+      "limit": 1,
+      "pass_check": true
+    },
+    {
+      "name": "G4 stopping versus PSTAR percent",
+      "energy_MeV": 5.0,
+      "material": "Al",
+      "observed": 0.016807324855716566,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR quadrature change percent",
+      "energy_MeV": 5.0,
+      "material": "Al",
+      "observed": 2.732758352941289e-07,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic quadrature change percent",
+      "energy_MeV": 5.0,
+      "material": "Al",
+      "observed": 9.325873406851315e-13,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus shared-table characteristic percent",
+      "energy_MeV": 5.0,
+      "material": "Cu",
+      "observed": 0.0030802547865471652,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus independent PSTAR percent",
+      "energy_MeV": 5.0,
+      "material": "Cu",
+      "observed": 0.3032710414185402,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR-fed Radiant versus PSTAR characteristic percent",
+      "energy_MeV": 5.0,
+      "material": "Cu",
+      "observed": 0.07531016528143919,
+      "limit": 0.25,
+      "pass_check": true
+    },
+    {
+      "name": "Radiant versus Geant4 combined percent/SE",
+      "energy_MeV": 5.0,
+      "material": "Cu",
+      "observed": 0.13573463094023183,
+      "limit": 1,
+      "pass_check": true
+    },
+    {
+      "name": "G4 stopping versus PSTAR percent",
+      "energy_MeV": 5.0,
+      "material": "Cu",
+      "observed": 0.29121174367388036,
+      "limit": 0.5,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR quadrature change percent",
+      "energy_MeV": 5.0,
+      "material": "Cu",
+      "observed": 7.359579612398193e-09,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "G4 characteristic quadrature change percent",
+      "energy_MeV": 5.0,
+      "material": "Cu",
+      "observed": 4.375388940047742e-11,
+      "limit": 0.01,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR total-stop/CSDA-range internal consistency percent",
+      "energy_MeV": "1-2",
+      "material": "Al",
+      "observed": 0.06654169886191053,
+      "limit": 0.2,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR total-stop/CSDA-range internal consistency percent",
+      "energy_MeV": "2-5",
+      "material": "Al",
+      "observed": 0.0032298252028883923,
+      "limit": 0.2,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR total-stop/CSDA-range internal consistency percent",
+      "energy_MeV": "5-10",
+      "material": "Al",
+      "observed": 0.07372053609223661,
+      "limit": 0.2,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR total-stop/CSDA-range internal consistency percent",
+      "energy_MeV": "1-2",
+      "material": "Cu",
+      "observed": 0.04307638405097736,
+      "limit": 0.2,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR total-stop/CSDA-range internal consistency percent",
+      "energy_MeV": "2-5",
+      "material": "Cu",
+      "observed": 0.0027774511797362678,
+      "limit": 0.2,
+      "pass_check": true
+    },
+    {
+      "name": "PSTAR total-stop/CSDA-range internal consistency percent",
+      "energy_MeV": "5-10",
+      "material": "Cu",
+      "observed": 0.08270059220694126,
+      "limit": 0.2,
+      "pass_check": true
+    }
+  ],
+  "passed": true
+}

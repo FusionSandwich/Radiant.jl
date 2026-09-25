@@ -1,0 +1,2 @@
+energy_MeV,histories,Al_density_g_cm3,Cu_density_g_cm3,Al_edep_MeV,Al_se_MeV,Cu_edep_MeV,Cu_se_MeV,max_step_mm,slab_cm
+1.2,200000,2.699,8.96,0.00718177736973471,9.29220522715717e-06,0.016830560069177,3.7562021524176e-05,5e-06,2e-05

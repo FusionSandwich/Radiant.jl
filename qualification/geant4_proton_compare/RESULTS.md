@@ -1,5 +1,7 @@
 # Matched Geant4/Radiant proton slab comparison (2026-09-25)
 
+The [low-energy extension](LOW_ENERGY_RESULTS.md) adds 1.2, 2 and 5 MeV matched Geant4/Radiant cases and an independent NIST PSTAR electronic-CSDA reference. Its claim remains limited to electronic stopping and thin Al/Cu slab transport.
+
 ## What was compared
 
 This is a controlled **electronic-stopping transport** comparison at 10, 100 and 499.99 MeV. Geant4 11.4.2 transports one proton per history through a 0.01 cm aluminum layer followed by a 0.01 cm copper layer. The source is uniform in the Al layer and in a 0.01 MeV-wide energy interval centred on the stated energy. Its two possible x-direction cosines are `±1/sqrt(3)` with equal probability. The Geant4 model registers proton `G4hIonisation`, transportation and a step limiter, sets a 1 m secondary production cut, disables energy-loss fluctuations, and has no multiple scattering or hadronic reactions. The final production run uses a 0.001 mm maximum step, one million histories per energy, and seed `731293`. Geant4 material densities, carried verbatim to Radiant, are Al 2.699 and Cu 8.96 g/cm³. Geant4's [application guide](https://geant4.web.cern.ch/documentation/dev/bfad_html/ForApplicationDevelopers/TrackingAndPhysics/physicsProcess.html) documents the ionisation/stopping and production-cut interfaces; [its cut reference](https://geant4.web.cern.ch/documentation/dev/prm_html/PhysicsReferenceManual/electromagnetic/energy_loss/setcuts.html) distinguishes production cuts from tracking cutoffs.

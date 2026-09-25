@@ -33,9 +33,10 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
-constexpr double slab_cm = 0.01;
+double slab_cm = 0.01;
 constexpr double source_half_width_MeV = 0.005;
 constexpr std::array<double, 3> energies_MeV{10.0, 100.0, 499.99};
 
@@ -153,13 +154,19 @@ class StepScores final : public G4UserSteppingAction {
 }
 
 int main(int argc, char** argv) {
-  if (argc != 4 && argc != 5) {
-    std::cerr << "usage: radiant_proton_compare <stopping.csv> <scores.csv> <histories-per-energy> [max-step-mm]\n";
+  if (argc != 4 && argc != 5 && argc != 7) {
+    std::cerr << "usage: radiant_proton_compare <stopping.csv> <scores.csv> <histories-per-energy> [max-step-mm [single-energy-MeV slab-thickness-cm]]\n";
     return 2;
   }
   const int histories = std::stoi(argv[3]);
-  const double max_step_mm = argc == 5 ? std::stod(argv[4]) : 0.005;
-  if (histories < 2 || !(max_step_mm > 0)) return 2;
+  const double max_step_mm = argc >= 5 ? std::stod(argv[4]) : 0.005;
+  std::vector<double> run_energies(energies_MeV.begin(), energies_MeV.end());
+  if (argc == 7) {
+    run_energies = {std::stod(argv[5])};
+    slab_cm = std::stod(argv[6]);
+  }
+  if (histories < 2 || !(max_step_mm > 0) || !(slab_cm > 0) ||
+      std::any_of(run_energies.begin(), run_energies.end(), [](double e){ return e - source_half_width_MeV <= 1 || e + source_half_width_MeV > 500; })) return 2;
   CLHEP::HepRandom::setTheSeed(731293);
   auto* manager = new G4RunManager();
   manager->SetUserInitialization(new Detector(max_step_mm));
@@ -200,16 +207,16 @@ int main(int argc, char** argv) {
   }
   table.close();
   std::ofstream out(argv[2]);
-  out << "energy_MeV,histories,Al_density_g_cm3,Cu_density_g_cm3,Al_edep_MeV,Al_se_MeV,Cu_edep_MeV,Cu_se_MeV,max_step_mm\n";
+  out << "energy_MeV,histories,Al_density_g_cm3,Cu_density_g_cm3,Al_edep_MeV,Al_se_MeV,Cu_edep_MeV,Cu_se_MeV,max_step_mm,slab_cm\n";
   out << std::setprecision(15);
-  for (const double energy : energies_MeV) {
+  for (const double energy : run_energies) {
     scores.Reset();
     primary->SetEnergy(energy);
     manager->BeamOn(histories);
     const auto mean = scores.Mean();
     const auto se = scores.StandardError();
     out << energy << ',' << histories << ',' << al->GetDensity()/(g/cm3) << ',' << cu->GetDensity()/(g/cm3)
-        << ',' << mean[0] << ',' << se[0] << ',' << mean[1] << ',' << se[1] << ',' << max_step_mm << '\n';
+        << ',' << mean[0] << ',' << se[0] << ',' << mean[1] << ',' << se[1] << ',' << max_step_mm << ',' << slab_cm << '\n';
     std::cout << "E=" << energy << " MeV Al=" << mean[0] << " Cu=" << mean[1] << "\n";
   }
   delete manager;

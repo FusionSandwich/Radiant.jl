@@ -3,11 +3,14 @@ using SHA
 using DelimitedFiles
 using Printf
 
-length(ARGS) in (4,5) || error("usage: julia run_radiant.jl <stopping.csv> <geant4_scores.csv> <voxels-per-material> <lower-energy-groups> [energy-MeV]")
+length(ARGS) in (4,5,6,7,8) || error("usage: julia run_radiant.jl <stopping.csv> <geant4_scores.csv> <voxels-per-material> <lower-energy-groups> [energy-MeV [slab-cm [output.csv [lower-energy-MeV]]]]")
 table_path, g4_scores_path = ARGS[1:2]
 nvox = parse(Int,ARGS[3])
 ng = parse(Int,ARGS[4])
 energy_filter = length(ARGS) == 5 ? parse(Float64,ARGS[5]) : nothing
+if length(ARGS) >= 6
+    energy_filter = parse(Float64,ARGS[5])
+end
 nvox > 0 && ng > 0 || error("Voxel and energy-group counts must be positive.")
 
 table = readdlm(table_path,',',Float64;skipstart=1)
@@ -16,13 +19,21 @@ energies = vec(table[:,1])
 all(diff(energies) .> 0) || error("Geant4 stopping grid is not increasing.")
 all(isfinite,table) && all(table[:,2:3] .> 0) || error("Geant4 stopping table has invalid values.")
 table_hash = bytes2hex(sha256(read(table_path)))
-slab_cm = 0.01
-out_path = joinpath(dirname(table_path),"radiant_scores_mass_corrected.csv")
+slab_cm = length(ARGS) >= 6 ? parse(Float64,ARGS[6]) : 0.01
+slab_cm > 0 || error("Slab thickness must be positive.")
+out_path = length(ARGS) >= 7 ? ARGS[7] : joinpath(dirname(table_path),"radiant_scores_mass_corrected.csv")
+lower_override = length(ARGS) == 8 ? parse(Float64,ARGS[8]) : nothing
+legacy_header = "energy_MeV,voxels_per_material,lower_energy_groups,Al_edep_MeV,Cu_edep_MeV,source_rate,solve_s,classification,table_sha256"
+header_with_slab = legacy_header * ",slab_cm"
+header_with_lower = header_with_slab * ",lower_MeV"
 if !isfile(out_path)
     open(out_path,"w") do io
-        println(io,"energy_MeV,voxels_per_material,lower_energy_groups,Al_edep_MeV,Cu_edep_MeV,source_rate,solve_s,classification,table_sha256")
+        println(io,header_with_lower)
     end
 end
+out_header = open(io -> readline(io),out_path)
+out_header in (legacy_header,header_with_slab,header_with_lower) ||
+    error("Unknown Radiant score-file schema; refusing to append.")
 
 for row in eachrow(g4)
     E = row[1]
@@ -30,7 +41,8 @@ for row in eachrow(g4)
         continue
     end
     densities = (row[3],row[4])
-    lower = E <= 20 ? 1.0 : E <= 200 ? E-5.0 : E-2.0
+    lower = isnothing(lower_override) ? (E <= 20 ? 1.0 : E <= 200 ? E-5.0 : E-2.0) : lower_override
+    1.0 <= lower < E-0.005 || error("Invalid Radiant lower-energy boundary.")
     boundaries = vcat([E+0.005],collect(range(E-0.005,stop=lower,length=ng+1)))
     proton = Proton()
     materials = Material[]
@@ -113,6 +125,9 @@ for row in eachrow(g4)
     classification = proton_binding_receipt(binding)["classification"]
     @printf("E=%.5f MeV nvox=%d ng=%d Al=%.9g Cu=%.9g solve=%.3f s %s\n",E,nvox,ng,al,copper,seconds,classification)
     open(out_path,"a") do io
-        @printf(io,"%.8f,%d,%d,%.12g,%.12g,%.12g,%.6f,%s,%s\n",E,nvox,ng,al,copper,source_rate,seconds,classification,table_hash)
+        @printf(io,"%.8f,%d,%d,%.12g,%.12g,%.12g,%.6f,%s,%s",E,nvox,ng,al,copper,source_rate,seconds,classification,table_hash)
+        out_header != legacy_header && @printf(io,",%.9g",slab_cm)
+        out_header == header_with_lower && @printf(io,",%.9g",lower)
+        println(io)
     end
 end
