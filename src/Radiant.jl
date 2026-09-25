@@ -84,6 +84,7 @@ module Radiant
         "Piecewise_Flat_Tape_Atlas.jl",
         "Mapped_Structured_Geometry.jl",
         "Charged_Ion_Transport_Primitives.jl",
+        "Proton_Native_Binding.jl",
         "Analytic_Curvature_Benchmark.jl",
         "Faceted_Geometry.jl",
         "Faceted_Local_Tape_Domain.jl",
@@ -115,6 +116,7 @@ module Radiant
     export Elastic_Collision,Elastic_Scattering,Inelastic_Collision,Bremsstrahlung,Compton
     export Pair_Production,Photoelectric,Annihilation,Rayleigh,Relaxation,Fluorescence,Auger
     export Material,Cross_Sections,Geometry,SN,Solvers,Surface_Source,Volume_Source
+    export set_provided_builder,set_transport_preflight
     export Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
     export Discrete_Ordinates
 
@@ -190,8 +192,11 @@ module Radiant
     export Relativistic_Ion_Kinematics,relativistic_ion_kinematics
     export Charged_Ion_Source_State,Tabulated_Ion_Transport_Model
     export ion_transport_coefficients,Nonelastic_Secondary_Route
+    export ion_csda_range_cm
     export Ion_Transport_Step_Result,magnetic_direction_step,ion_transport_step
     export synthetic_proton_transport_fixture
+    export Proton_Material_Data,Proton_Nonelastic_Data,Proton_Native_Binding
+    export bind_proton_native,proton_transport_preflight,proton_binding_receipt
 
     export Cylindrical_Shell_Path_Result,cylindrical_shell_critical_cosine
     export cylindrical_shell_path,pure_absorption_fraction

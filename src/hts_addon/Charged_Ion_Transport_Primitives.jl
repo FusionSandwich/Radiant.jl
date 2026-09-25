@@ -163,6 +163,34 @@ function ion_transport_coefficients(model::Tabulated_Ion_Transport_Model,
     )
 end
 
+"""Exact CSDA range integral for piecewise-linear total stopping, within the table only."""
+function ion_csda_range_cm(model::Tabulated_Ion_Transport_Model,species::Ion_Species,
+    initial_energy_MeV::Real,final_energy_MeV::Real)
+    initial = Float64(initial_energy_MeV)
+    final = Float64(final_energy_MeV)
+    isfinite(initial) && isfinite(final) && final <= initial ||
+        error("CSDA energies must be finite and ordered high to low.")
+    ion_transport_coefficients(model,species,initial)
+    ion_transport_coefficients(model,species,final)
+    initial == final && return 0.0
+    knots = sort(vcat(final,filter(E -> final < E < initial,model.energy_MeV),initial))
+    range_cm = 0.0
+    for index in 1:length(knots)-1
+        low = knots[index]
+        high = knots[index+1]
+        low_coefficients = ion_transport_coefficients(model,species,low)
+        high_coefficients = ion_transport_coefficients(model,species,high)
+        slow = low_coefficients.electronic_stopping_MeV_cm +
+            low_coefficients.nuclear_stopping_MeV_cm
+        shigh = high_coefficients.electronic_stopping_MeV_cm +
+            high_coefficients.nuclear_stopping_MeV_cm
+        slow > 0.0 && shigh > 0.0 || error("CSDA range requires strictly positive total stopping.")
+        range_cm += isapprox(slow,shigh;rtol=1.0e-12,atol=0.0) ?
+            (high-low)/slow : (high-low)*log(shigh/slow)/(shigh-slow)
+    end
+    return range_cm
+end
+
 struct Nonelastic_Secondary_Route
     channel_id::String
     production_owner::String

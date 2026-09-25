@@ -136,6 +136,8 @@ function build(this::Geometry,cs::Cross_Sections)
 
     # Build geometry parameters
     geometry(this,cs)
+    this.is_build = true
+    return this
 
 end
 

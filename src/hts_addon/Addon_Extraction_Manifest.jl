@@ -230,6 +230,14 @@ function default_hts_addon_extraction_manifest()
             notes="Provides hash-bound species/source states and deterministic relativistic stopping, straggling, scattering, magnetic, and nonelastic-routing primitives without fabricating physical tables.",
         ),
         HTS_Addon_Component(
+            :proton_native_binding,
+            ["src/hts_addon/Proton_Native_Binding.jl"];
+            core_dependencies=["Cross_Sections provided builder","transport preflight",
+                "Charged_Ion_Transport_Primitives","Process_Resolved_Scoring"],
+            status=:ready_to_extract,
+            notes="Binds domain- and provenance-checked manufactured proton tables to native SN CSD; nonzero nonelastic production and physical qualification remain blocked.",
+        ),
+        HTS_Addon_Component(
             :faceted_geometry,
             [
                 "src/hts_addon/Faceted_Geometry.jl",
@@ -323,6 +331,13 @@ function default_hts_addon_extraction_manifest()
         generic_core_touchpoints=[
             "src/Radiant.jl temporary include/export wiring",
             "src/structures/Multigroup_Cross_Sections.jl generic response channels",
+            "src/structures/Cross_Sections.jl generic provided-library builder and transport preflight",
+            "src/particle_transport/transport.jl generic transport preflight invocation",
+            "src/structures/Geometry.jl mark successfully built geometry for explicit source projection",
+            "src/particle_transport/electromagnetic_scattering_matrix.jl particle-rest-mass magnetic operator",
+            "src/hts_addon/Process_Resolved_Scoring.jl recoil-handoff quantity",
+            "docs/make.jl proton audit and requirements navigation",
+            "test/runtests.jl native manufactured proton test wiring",
             "src/cross_sections/generate_cross_sections.jl response-channel population",
             "src/structures/Electromagnetic_Field.jl generic cell-centred field storage",
             "src/structures/Flux_Per_Particle.jl generic outgoing-boundary storage",

@@ -38,18 +38,19 @@ electromagnetic fields.
   transport equation in the presence of external magnetic fields.
 
 """
-function electromagnetic_scattering_matrix(𝓔::Vector{Float64},𝓑::Vector{Float64},charge::Real,Ω::Vector{Vector{Float64}},w::Vector{Float64},Ndims::Int64,Mn::Array{Float64},Dn::Array{Float64},pl::Vector{Int64},pm::Vector{Int64},P::Int64,Ng::Int64,Eb::Vector{Float64},ΔE::Vector{Float64},Qdims::Int64)
+function electromagnetic_scattering_matrix(𝓔::Vector{Float64},𝓑::Vector{Float64},charge::Real,Ω::Vector{Vector{Float64}},w::Vector{Float64},Ndims::Int64,Mn::Array{Float64},Dn::Array{Float64},pl::Vector{Int64},pm::Vector{Int64},P::Int64,Ng::Int64,Eb::Vector{Float64},ΔE::Vector{Float64},Qdims::Int64;rest_mass_MeV::Real=0.510999)
 
 if Qdims != 3 error("Quadrature on the unit sphere is required for electromagnetic transport.") end
+isfinite(rest_mass_MeV) && rest_mass_MeV > 0 || error("Magnetic transport requires finite positive particle rest mass.")
 
 Nd = length(w)
 ℳ_EM = zeros(Ng,P,P)
 λ₀_EM = zeros(Ng)
 c = 2.99792458
-mₑc² = 0.510999
+rest_energy = Float64(rest_mass_MeV)
 𝒯_EM = zeros(Ng)
 for ig in range(1,Ng)
-    𝒯_EM[ig] = 2/ΔE[ig] * log((sqrt(Eb[ig]+2*mₑc²)+sqrt(Eb[ig]))/(sqrt(Eb[ig+1]+2*mₑc²)+sqrt(Eb[ig+1])))
+    𝒯_EM[ig] = 2/ΔE[ig] * log((sqrt(Eb[ig]+2*rest_energy)+sqrt(Eb[ig]))/(sqrt(Eb[ig+1]+2*rest_energy)+sqrt(Eb[ig+1])))
 end
 
 # Derivatives

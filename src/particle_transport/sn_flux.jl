@@ -43,7 +43,8 @@ function _prepare_electromagnetic_operator(
 
     if !has_spatial_magnetic_field(electromagnetic_field)
         matrix,lambda = electromagnetic_scattering_matrix(
-            𝓔,𝓑,charge,Ω,w,Ndims,Mn,Dn,pl,pm,Np,Ng,Eb,ΔE,Qdims,
+            𝓔,𝓑,charge,Ω,w,Ndims,Mn,Dn,pl,pm,Np,Ng,Eb,ΔE,Qdims;
+            rest_mass_MeV=get_mass(part),
         )
         return true,matrix,lambda
     end
@@ -63,7 +64,7 @@ function _prepare_electromagnetic_operator(
         if !haskey(cache,key)
             local_matrix,local_lambda = electromagnetic_scattering_matrix(
                 𝓔,collect(local_field),charge,Ω,w,Ndims,Mn,Dn,pl,pm,Np,Ng,Eb,ΔE,
-                Qdims,
+                Qdims;rest_mass_MeV=get_mass(part),
             )
             maximum(abs.(local_lambda)) <= Float64(lambda_tolerance) || error(
                 "Spatial electromagnetic operator produced a cell-dependent removal term. " *

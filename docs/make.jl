@@ -58,6 +58,8 @@ makedocs(
             "7 Fixed External Sources"       => "user_guide_fixed_external_sources.md",
             "8 Electromagnetic Fields"       => "user_guide_electromagnetic_fields.md",
             "9 Transport Calculations"       => "user_guide_transport_calculations.md",
+            "Proton capability audit"         => "proton_transport_capability_audit.md",
+            "Proton transport requirements"   => "proton_transport_requirements.md",
         ],
 
         #"Examples" => [],

@@ -1,0 +1,37 @@
+{
+  "schema": "radianthts.proton_data_coverage_ledger/v1",
+  "snapshot_date": "2026-09-25",
+  "domain_MeV_per_proton": [1.0, 500.0],
+  "qualified_exact_material_process_cells": 0,
+  "physical_source_records": 0,
+  "physical_stopping_range_rows": 0,
+  "physical_scattering_rows": 0,
+  "physical_correlated_event_families": 0,
+  "extrapolation_to_500_MeV_permitted": false,
+  "material_state_identity": "Exact tape product, phase, temperature, density, isotopes and layer interfaces must be bound before physical qualification; no generic REBCO surrogate is qualified here.",
+  "processes": [
+    {"process":"electronic_stopping","status":"BLOCKED_INPUT","coverage":"Manufactured 1-500 MeV table only; exact HTS materials unqualified","unit":"MeV/cm","reference_candidate":"NIST PSTAR for matching listed materials only"},
+    {"process":"nuclear_stopping","status":"BLOCKED_INPUT","coverage":"Manufactured 1-500 MeV table only","unit":"MeV/cm","reference_candidate":"NIST PSTAR matching-material nuclear stopping"},
+    {"process":"straggling","status":"BLOCKED_INPUT","coverage":"Synthetic coefficient only; no native fluctuation operator","unit":"MeV^2/cm","reference_candidate":"measured depth-energy and spread"},
+    {"process":"screened_coulomb_and_nuclear_elastic","status":"BLOCKED_INPUT","coverage":"Inherited ENDF hooks; no processed exact-isotope 1-500 MeV table","unit":"cm^-1 and differential angular law","reference_candidate":"evaluated differential files and EXFOR"},
+    {"process":"multiple_scattering","status":"BLOCKED_INPUT","coverage":"Synthetic variance moment only","unit":"rad^2/cm","reference_candidate":"independent lateral-spread/depth benchmarks"},
+    {"process":"nonelastic_removal_and_production","status":"BLOCKED_INPUT","coverage":"Explicit synthetic zero declaration; no physical nonzero production matrix or event family","unit":"cm^-1; emitted particles per collision","reference_candidate":"evaluated to supported limit, then qualified high-energy event producer"},
+    {"process":"pion_muon_and_decay","status":"BLOCKED_INPUT","coverage":"No event/routing data at 500 MeV","unit":"differential yield and energy/current","reference_candidate":"qualified pion-capable event model and independent measurements"}
+  ],
+  "external_evidence": [
+    {"id":"iaea_medical_charged_particle","url":"https://nucleus.iaea.org/Pages/charged-particle-cross-section-database.aspx","version_date":"static resource, last update 2011","direct_scope":"48 selected reactions, maximum 100 MeV","status":"PHYSICAL_CANDIDATE","reuse_note":"Review per-dataset terms and attribution before copying; none copied here."},
+    {"id":"tendl_2025","url":"https://tendl.ic.ac.uk/tendl_2025/tendl2025.html","version_date":"TENDL-2025","direct_scope":"main evaluations to 200 MeV; separate test files reported to 600 MeV","status":"PHYSICAL_CANDIDATE","reuse_note":"Review release-specific data terms, processing and isotope/channel coverage before import; no file imported."},
+    {"id":"nist_pstar","url":"https://physics.nist.gov/PhysRefData/Star/Text/PSTAR.html","version_date":"NIST online program, accessed 2026-09-25","direct_scope":"proton stopping/range output 0.001-10000 MeV for listed materials","status":"PHYSICAL_CANDIDATE","reuse_note":"Reference comparison only; verify material identity, state and NIST usage terms; no output imported."},
+    {"id":"iaea_exfor","url":"https://nucleus.iaea.org/Pages/experimental-nuclear-reaction-data.aspx","version_date":"online EXFOR catalogue, accessed 2026-09-25","direct_scope":"experimental nuclear reaction data compilation; case-specific energy/channel selection required","status":"PHYSICAL_CANDIDATE","reuse_note":"Review original experiment and EXFOR attribution/usage before importing a dataset."},
+    {"id":"geant4_bertini","url":"https://geant4.web.cern.ch/documentation/dev/prm_html/PhysicsReferenceManual/hadronic/BertiniCascade/Cascade.html","version_date":"Geant4 11.4 physics reference manual","direct_scope":"model describes proton/pion induced hadronic reactions within stated model range","status":"PHYSICAL_CANDIDATE","reuse_note":"Geant4 software license permits redistribution with required notices and naming conditions; model/dataset validity must be qualified separately."},
+    {"id":"geant4_license","url":"https://geant4.web.cern.ch/license/license","version_date":"license version 1.0, 2006","direct_scope":"software license terms, not physics validation","status":"PHYSICAL_CANDIDATE","reuse_note":"Retain copyright/license notices and required documentation acknowledgment if redistributed."}
+  ],
+  "local_read_only_evidence": [
+    "C:\\rhts-ta\\dpa\\reports\\deterministic\\PROTON500_DATA_COVERAGE_V2.json",
+    "C:\\rhts-ta\\dpa\\reports\\deterministic\\PROTON_CROSS_SECTION_COVERAGE.json",
+    "C:\\rhts-ta\\dpa\\reports\\deterministic\\PROTON_STOPPING_RANGE_BENCHMARK.json",
+    "C:\\rhts-ta\\dpa\\reports\\deterministic\\PROTON_MULTIPLE_SCATTERING_BENCHMARK.json",
+    "C:\\rhts-ta\\dpa\\reports\\deterministic\\PROTON_SPALLATION_EVENT_SCHEMA.json"
+  ],
+  "inference": "The evaluated candidates cited above do not form a complete physical 1-500 MeV chain for exact HTS materials; Geant4 is a plausible 200-500 MeV producer candidate but is unexecuted and unqualified in this campaign."
+}

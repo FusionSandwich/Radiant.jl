@@ -21,6 +21,12 @@ N/A
 """
 function transport(cross_sections::Cross_Sections,geometry::Geometry,solvers::Solvers,sources::Fixed_Sources,electromagnetic_field::Electromagnetic_Field=Electromagnetic_Field())
 
+if !isnothing(cross_sections.transport_preflight)
+    cross_sections.transport_preflight(
+        cross_sections,geometry,solvers,sources,electromagnetic_field,
+    )
+end
+
 #----
 # Initialization
 #----

@@ -5,6 +5,7 @@ const PROCESS_RESPONSE_QUANTITIES = (
     "total",
     "stopping-power",
     "momentum-transfer",
+    "recoil-handoff",
 )
 
 """Spatial response fields resolved by the interaction/type/outgoing-particle kernel key."""
@@ -105,6 +106,9 @@ function _score_output_units(quantity::String,mass_normalized::Bool)
         return "response/cm3 per transport source basis"
     elseif quantity in ("stopping-power","momentum-transfer")
         return "model response per transport source basis"
+    elseif quantity == "recoil-handoff"
+        return mass_normalized ? "MeV/g per transport source basis" :
+                                 "MeV/cm3 per transport source basis"
     end
     return "unspecified"
 end

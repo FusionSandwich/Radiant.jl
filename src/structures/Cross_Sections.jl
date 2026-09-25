@@ -26,6 +26,8 @@ mutable struct Cross_Sections
     is_build                  ::Bool
     custom_absorption         ::Vector{Float64}
     custom_scattering         ::Vector{Float64}
+    provided_builder          ::Union{Nothing,Function}
+    transport_preflight       ::Union{Nothing,Function}
 
     function Cross_Sections()
         this = new()
@@ -46,6 +48,8 @@ mutable struct Cross_Sections
         this.is_build = false
         this.custom_absorption = Float64[]
         this.custom_scattering = Float64[]
+        this.provided_builder = nothing
+        this.transport_preflight = nothing
         return this
     end
 end
@@ -171,6 +175,10 @@ function is_ready_to_build(this::Cross_Sections)
         any(x -> !isfinite(x) || x < 0.0,this.custom_scattering) && error(
             "Custom scattering cross sections must be finite and nonnegative.",
         )
+    elseif source == "provided"
+        isnothing(this.provided_builder) && error(
+            "A provided multigroup library requires an explicit builder.",
+        )
     else
         error("Unknown cross-section source: $(this.source).")
     end
@@ -195,6 +203,17 @@ function build(this::Cross_Sections)
         end
     elseif source == "custom"
         custom_cross_sections(this)
+    elseif source == "provided"
+        this.provided_builder(this)
+        ismissing(this.multigroup_cross_sections) && error(
+            "The provided builder did not populate multigroup cross sections.",
+        )
+        ismissing(this.energy_boundaries) && error(
+            "The provided builder did not populate energy boundaries.",
+        )
+        ismissing(this.number_of_groups) && error(
+            "The provided builder did not populate group counts.",
+        )
     end
     this.is_build = true
     return this
@@ -214,11 +233,28 @@ end
 
 function set_source(this::Cross_Sections,source::String)
     normalized = lowercase(source)
-    normalized in ("fmac-m","matxs","physics-models","custom") || error(
+    normalized in ("fmac-m","matxs","physics-models","custom","provided") || error(
         "Unknown cross-section source: $(source).",
     )
     this.source = normalized
     return _invalidate!(this)
+end
+
+"""Set a generic, caller-owned builder for the `provided` multigroup source.
+
+The builder must populate group counts, boundaries, and the particle × material library.
+This hook carries no physical qualification by itself; domain and provenance checks belong to
+the caller-owned binding and must run before transport.
+"""
+function set_provided_builder(this::Cross_Sections,builder::Function)
+    this.provided_builder = builder
+    return _invalidate!(this)
+end
+
+"""Attach a caller-owned guard invoked by the native `transport` entry point."""
+function set_transport_preflight(this::Cross_Sections,preflight::Function)
+    this.transport_preflight = preflight
+    return this
 end
 
 function set_file(this::Cross_Sections,file::String)
