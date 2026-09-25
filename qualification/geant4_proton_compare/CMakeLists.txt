@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(radiant_proton_compare LANGUAGES CXX)
+find_package(Geant4 REQUIRED)
+include(${Geant4_USE_FILE})
+add_executable(radiant_proton_compare proton_slab.cc)
+target_link_libraries(radiant_proton_compare PRIVATE ${Geant4_LIBRARIES})
+target_compile_features(radiant_proton_compare PRIVATE cxx_std_17)
+target_compile_options(radiant_proton_compare PRIVATE -Wall -Wextra -Wpedantic)
