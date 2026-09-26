@@ -121,6 +121,7 @@ module Radiant
     export set_provided_builder,set_transport_preflight
     export Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
     export SN_Boundary_Flux,get_boundary_flux,get_outgoing_current
+    export get_outgoing_energy_current,get_escaped_energy_current
     export boundary_source_fidelity,assert_boundary_source_fidelity
     export Discrete_Ordinates
 

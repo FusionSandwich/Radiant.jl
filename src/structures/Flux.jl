@@ -135,3 +135,17 @@ function get_outgoing_current(this::Flux,particle::Particle)
     index === nothing && error("No data for the specified particle.")
     return get_outgoing_current(this.flux_per_particle[index])
 end
+
+"""Get generation-summed represented crossing kinetic energy by face/group."""
+function get_outgoing_energy_current(this::Flux,particle::Particle)
+    index = findfirst(x -> get_tag(x) == get_tag(particle),this.particles)
+    index === nothing && error("No data for the specified particle.")
+    return get_outgoing_energy_current(this.flux_per_particle[index])
+end
+
+"""Get generation-summed void-only escaped kinetic energy by face/group."""
+function get_escaped_energy_current(this::Flux,particle::Particle)
+    index = findfirst(x -> get_tag(x) == get_tag(particle),this.particles)
+    index === nothing && error("No data for the specified particle.")
+    return get_escaped_energy_current(this.flux_per_particle[index])
+end

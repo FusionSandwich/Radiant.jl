@@ -208,7 +208,8 @@ function compute_flux(
     I_max = get_maximum_iteration(solver)
     𝚽l = zeros(Ng,Np,Nm[5],Ns[1],Ns[2],Ns[3])
     boundary_flux = retain_boundary_flux ? SN_Boundary_Flux(
-        Ndims,Ω,w,Δs,get_energy_boundaries(cross_sections,part),boundary_conditions,Ng,Nm,
+        Ndims,Ω,w,Δs,get_energy_boundaries(cross_sections,part),boundary_conditions,Ng,Nm;
+        orders=𝒪,fully_coupled=isFC,is_csd=is_CSD,
     ) : nothing
     if is_CSD
         𝚽cutoff = zeros(Np,Nm[5],Ns[1],Ns[2],Ns[3])
@@ -300,6 +301,9 @@ function compute_flux(
     end
     add_spectral_radius(particle_flux,ρ_in)
     if boundary_flux !== nothing
+        boundary_flux.outer_convergence[] = (converged=!is_outer_iteration || ϵ_out < ϵ_max,
+            required=is_outer_iteration,residual=is_outer_iteration ? ϵ_out : 0.0,
+            tolerance=ϵ_max,iterations=i_out,iteration_cap=I_max)
         push!(particle_flux.boundary_flux,boundary_flux)
     end
     return particle_flux

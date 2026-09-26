@@ -207,7 +207,8 @@ end
     println("CSD_ENERGY electronic=",live_score.electronic_deposition_MeV,
         " recoil_handoff=",live_score.recoil_handoff_MeV,
         " cutoff_handoff=",live_score.cutoff_kinetic_handoff_MeV,
-        " escaped_energy=MISSING secondary_energy=MISSING physical_validation=false")
+        " escaped_energy=",live_score.escaped_energy_MeV,
+        " secondary_energy=MISSING physical_validation=false")
     for (group,status) in enumerate(boundary_receipts[1].convergence)
         println("CSD_CONVERGENCE group=",group," receipt=",status)
     end

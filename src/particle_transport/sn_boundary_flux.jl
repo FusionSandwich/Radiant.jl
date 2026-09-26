@@ -8,9 +8,8 @@ face average, integrated over the energy group. Higher moments are retained, not
 1D current is per unit transverse area; 2D current is per unit extruded length.
 Reflective/periodic face crossings are retained and are not escaped particles.
 Scores retain the raw input-source normalization; divide by the applicable Fixed_Sources
-normalization before claiming per-history values. Exact escaped energy is unsupported:
-group midpoint times current is generally insufficient, and the energy/face moment
-contraction and moment mapping have not been qualified by this first increment.
+normalization before claiming per-history values. Energy contraction requires explicit
+native normalized-Legendre metadata; legacy captures support particle scoring only.
 """
 struct SN_Boundary_Flux
     dimension::Int64
@@ -21,16 +20,42 @@ struct SN_Boundary_Flux
     boundary_conditions::Vector{Int64}
     faces::Vector{Array{Float64,5}}
     convergence::Vector{NamedTuple}
+    orders::Union{Nothing,Vector{Int64}}
+    fully_coupled::Union{Nothing,Bool}
+    is_csd::Union{Nothing,Bool}
+    basis::Symbol
+    outer_convergence::Base.RefValue{NamedTuple}
 end
 
-function SN_Boundary_Flux(dimension,Ω,w,Δs,Eb,boundary_conditions,Ng,Nm)
+function SN_Boundary_Flux(dimension,Ω,w,Δs,Eb,boundary_conditions,Ng,Nm;
+    orders=nothing,fully_coupled=nothing,is_csd=nothing)
     dimension in 1:3 || error("SN boundary scoring supports Cartesian dimensions 1, 2 and 3.")
     length(Ω) == 3 && all(length(v) == length(w) for v in Ω) || error("Invalid boundary quadrature shape.")
     all(isfinite, w) && all(w .> 0) || error("Boundary quadrature weights must be finite and positive.")
     all(all(isfinite,v) for v in Ω) || error("Boundary directions must be finite.")
+    length(boundary_conditions) == 2dimension || error("Boundary labels must match active faces.")
+    Ng > 0 && length(Nm) >= dimension && all(Nm[a] > 0 for a in 1:dimension) ||
+        error("Boundary group and face moment counts must be positive.")
     length(Eb) == Ng+1 && all(isfinite,Eb) && all(diff(Eb) .< 0) || error("Boundary energy edges must be strictly decreasing.")
     for a in 1:dimension
         all(isfinite,Δs[a]) && all(Δs[a] .> 0) || error("Boundary cell widths must be finite and positive.")
+    end
+    metadata = (orders,fully_coupled,is_csd)
+    all(isnothing,metadata) || all(!isnothing(v) for v in metadata) ||
+        error("Boundary basis orders, coupling and CSD flag must be supplied together.")
+    native_orders = nothing
+    if orders !== nothing
+        length(orders) == 4 && all(v isa Integer && v >= 1 for v in orders) ||
+            error("Native boundary orders must contain four positive integers.")
+        fully_coupled isa Bool && is_csd isa Bool || error("Boundary scheme flags must be Bool.")
+        native_orders = Int64.(orders)
+        all(native_orders[a] == 1 for a in dimension+1:3) || error("Inactive axis orders must be one.")
+        is_csd || native_orders[4] == 1 || error("Non-CSD capture cannot carry energy slopes.")
+        for a in 1:dimension
+            face_orders = native_orders[[b for b in 1:4 if b != a]]
+            expected = fully_coupled ? prod(big.(face_orders)) : 1+sum(big.(face_orders).-1)
+            expected == Nm[a] || error("Boundary face shape does not match native basis orders.")
+        end
     end
     faces = Array{Float64,5}[]
     for a in 1:dimension
@@ -47,7 +72,10 @@ function SN_Boundary_Flux(dimension,Ω,w,Δs,Eb,boundary_conditions,Ng,Nm)
     # only physical axes and canonical empty placeholders for inactive axes, so
     # generation compatibility checks never traverse uninitialized references.
     widths = [a <= dimension ? copy(Δs[a]) : Float64[] for a in 1:3]
-    return SN_Boundary_Flux(Int64(dimension),deepcopy(Ω),copy(w),widths,copy(Eb),copy(boundary_conditions),faces,status)
+    outer = Ref{NamedTuple}((converged=false,required=missing,residual=NaN,tolerance=NaN,
+        iterations=0,iteration_cap=0))
+    return SN_Boundary_Flux(Int64(dimension),deepcopy(Ω),copy(w),widths,copy(Eb),copy(boundary_conditions),faces,status,
+        native_orders,fully_coupled,is_csd,orders === nothing ? :unknown : :native_group_integrated_normalized_legendre,outer)
 end
 
 # The optional capture tuple contains this generation, group and ordinate. Capture the
@@ -85,4 +113,81 @@ function get_outgoing_current(data::SN_Boundary_Flux)
         end
     end
     return current
+end
+
+function _validate_sn_energy_basis(data::SN_Boundary_Flux)
+    data.orders !== nothing && data.fully_coupled !== nothing && data.is_csd !== nothing &&
+        data.basis == :native_group_integrated_normalized_legendre ||
+        error("Energy current requires authoritative native boundary basis metadata.")
+    length(data.orders) == 4 && all(data.orders .>= 1) || error("Invalid captured basis orders.")
+    all(data.orders[a] == 1 for a in data.dimension+1:3) || error("Inactive captured axis order differs.")
+    data.is_csd || data.orders[4] == 1 || error("Non-CSD capture has an energy slope.")
+    length(data.faces) == 2*data.dimension && length(data.boundary_conditions) == length(data.faces) ||
+        error("Captured boundary face count differs.")
+    Ng = length(data.energy_boundaries)-1
+    Ng > 0 && all(isfinite,data.energy_boundaries) && all(diff(data.energy_boundaries) .< 0) ||
+        error("Captured energy boundaries must be finite and decreasing.")
+    length(data.directions) == 3 && all(length(v) == length(data.weights) && all(isfinite,v) for v in data.directions) &&
+        all(v -> isfinite(v) && v > 0,data.weights) || error("Invalid captured quadrature.")
+    for a in 1:data.dimension
+        all(v -> isfinite(v) && v > 0,data.widths[a]) || error("Invalid captured cell widths.")
+        face_orders = data.orders[[b for b in 1:4 if b != a]]
+        expected = data.fully_coupled ? prod(big.(face_orders)) : 1+sum(big.(face_orders).-1)
+        tangents = [b for b in 1:data.dimension if b != a]
+        shape = [length(data.widths[b]) for b in tangents]
+        while length(shape) < 2; push!(shape,1); end
+        for f in (2a-1,2a)
+            size(data.faces[f]) == (Ng,length(data.weights),expected,shape...) ||
+                error("Captured face shape differs from basis or geometry.")
+            all(isfinite,data.faces[f]) || error("Captured boundary moments must be finite.")
+        end
+    end
+    return nothing
+end
+
+"""
+Integrate represented crossing kinetic energy by `(face,group)`. Native face moments
+are group integrated and use normalized Legendre polynomials with upper E at +1.
+Orthogonality leaves only E midpoint times F0 plus ΔE/(2sqrt(3)) times FE1.
+The FE1 mode is index 2 only when the authoritative energy order is at least two.
+Signed diagnostics are retained; reflective and periodic crossings are included.
+"""
+function get_outgoing_energy_current(data::SN_Boundary_Flux)
+    _validate_sn_energy_basis(data)
+    Ng = length(data.energy_boundaries)-1
+    current = zeros(2*data.dimension,Ng)
+    for face in eachindex(data.faces)
+        axis = (face+1) ÷ 2
+        outward_sign = isodd(face) ? -1.0 : 1.0
+        tangents = [a for a in 1:data.dimension if a != axis]
+        for g in 1:Ng
+            upper,lower = data.energy_boundaries[g:g+1]
+            midpoint = upper/2+lower/2
+            slope_weight = (upper-lower)/(2sqrt(3.0))
+            isfinite(midpoint) && isfinite(slope_weight) || error("Energy integration weights overflowed.")
+            for n in eachindex(data.weights), j in axes(data.faces[face],4), k in axes(data.faces[face],5)
+                cosine = outward_sign*data.directions[axis][n]
+                cosine > 0 || continue
+                measure = isempty(tangents) ? 1.0 : data.widths[tangents[1]][j]
+                if length(tangents) == 2; measure *= data.widths[tangents[2]][k]; end
+                energy = midpoint*data.faces[face][g,n,1,j,k]
+                if data.orders[4] >= 2; energy += slope_weight*data.faces[face][g,n,2,j,k]; end
+                contribution = data.weights[n]*cosine*measure*energy
+                isfinite(measure) && isfinite(energy) && isfinite(contribution) || error("Boundary energy score overflowed.")
+                current[face,g] += contribution
+                isfinite(current[face,g]) || error("Accumulated boundary energy score overflowed.")
+            end
+        end
+    end
+    return current
+end
+
+"""Void-only escaped kinetic energy. Closed faces are zero; unknown labels fail closed."""
+function get_escaped_energy_current(data::SN_Boundary_Flux)
+    all(code in (0,1,2) for code in data.boundary_conditions) || error("Unknown boundary condition code in escape score.")
+    score = get_outgoing_energy_current(data)
+    for face in eachindex(data.boundary_conditions)
+        data.boundary_conditions[face] == 0 || (score[face,:] .= 0.0)
+    end
+    return score
 end

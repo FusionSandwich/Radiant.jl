@@ -158,15 +158,36 @@ function get_boundary_flux(this::Flux_Per_Particle)
 end
 
 """Sum outward face/group crossing currents over all retained particle generations."""
-function get_outgoing_current(this::Flux_Per_Particle)
+function _compatible_boundary_generations(this::Flux_Per_Particle)
     generations = get_boundary_flux(this)
     first = generations[1]
     for data in generations
         data.dimension == first.dimension && data.directions == first.directions &&
             data.weights == first.weights && data.widths == first.widths &&
             data.energy_boundaries == first.energy_boundaries &&
-            data.boundary_conditions == first.boundary_conditions ||
-            error("Cannot accumulate boundary generations with different geometry or quadrature.")
+            data.boundary_conditions == first.boundary_conditions &&
+            data.orders == first.orders && data.fully_coupled == first.fully_coupled &&
+            data.is_csd == first.is_csd && data.basis == first.basis &&
+            size.(data.faces) == size.(first.faces) ||
+            error("Cannot accumulate boundary generations with different geometry, quadrature or basis metadata.")
     end
-    return sum(get_outgoing_current(data) for data in generations)
+    return generations
+end
+
+function get_outgoing_current(this::Flux_Per_Particle)
+    return sum(get_outgoing_current(data) for data in _compatible_boundary_generations(this))
+end
+
+"""Sum represented crossing kinetic energy over compatible captured generations."""
+function get_outgoing_energy_current(this::Flux_Per_Particle)
+    score = sum(get_outgoing_energy_current(data) for data in _compatible_boundary_generations(this))
+    all(isfinite,score) || error("Accumulated boundary energy score overflowed.")
+    return score
+end
+
+"""Sum void-only represented escaped kinetic energy over compatible generations."""
+function get_escaped_energy_current(this::Flux_Per_Particle)
+    score = sum(get_escaped_energy_current(data) for data in _compatible_boundary_generations(this))
+    all(isfinite,score) || error("Accumulated escaped energy score overflowed.")
+    return score
 end

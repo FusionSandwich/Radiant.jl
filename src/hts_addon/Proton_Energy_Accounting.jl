@@ -83,7 +83,8 @@ end
 Extract separate electronic, recoil and residual-cutoff ownership from a built
 single-species native proton solve. The binding's fail-closed preflight is reused;
 nonelastic removal and unqualified physical mode cannot bypass it through scoring.
-This partial ledger has no inferred leakage, secondaries or convergence evidence.
+Void escape is attached only with compatible captured basis and finite native
+solver/reconstruction/outer receipts. Injection and secondary ownership remain explicit.
 """
 function proton_energy_accounting(binding::Proton_Native_Binding,geometry::Geometry,
     solvers::Solvers,sources::Fixed_Sources,flux::Flux;
@@ -124,13 +125,100 @@ function proton_energy_accounting(binding::Proton_Native_Binding,geometry::Geome
     recoil_mass = _proton_accounting_array(recoil ./ density,"Recoil mass score")
     electronic_total = _proton_accounting_scalar(sum(electronic .* measure),"Electronic total")
     recoil_total = _proton_accounting_scalar(sum(recoil .* measure),"Recoil total")
+    escape = _proton_verified_escape(binding,geometry,solvers,sources,flux,particle,
+        basis,physical_normalization)
     return merge(handoff,(electronic_deposition_density=electronic,
         electronic_deposition_per_mass=electronic_mass,
         recoil_handoff_density=recoil,recoil_handoff_per_mass=recoil_mass,
         electronic_deposition_MeV=electronic_total,
         recoil_handoff_MeV=recoil_total,
         binding_input_sha256=binding.input_snapshot_sha256,
-        binding_library_sha256=binding.library_snapshot_sha256[]))
+        binding_library_sha256=binding.library_snapshot_sha256[]),escape)
+end
+
+function _proton_verified_escape(binding,geometry,solvers,sources,flux,particle,basis,physical_normalization)
+    absent = (escaped_energy_MeV=missing,escaped_energy_by_face_group_MeV=missing,
+        raw_crossing_energy_by_face_group_MeV=missing,raw_escaped_energy_by_face_group_MeV=missing,
+        raw_escaped_energy_by_generation_MeV=missing,
+        convergence_verified=missing,
+        escape_status=:capture_absent,escape_units="MeV per declared source basis")
+    index = findfirst(x -> get_tag(x) == get_tag(particle),flux.particles)
+    index === nothing && error("No proton flux for energy accounting.")
+    fpp = flux.flux_per_particle[index]
+    isempty(fpp.boundary_flux) && return absent
+    generations = _compatible_boundary_generations(fpp)
+    solver = get_method(solvers,particle)
+    coupling = get_is_full_coupling(solver)
+    _,orders,_ = get_schemes(solver,geometry,coupling)
+    _,is_csd = get_solver_type(solver)
+    dimension = get_dimension(geometry)
+    native_widths = get_voxels_width(geometry)
+    widths = [a <= dimension ? native_widths[a] : Float64[] for a in 1:3]
+    directions,weights = quadrature(get_quadrature_order(solver),get_quadrature_type(solver),
+        dimension,get_quadrature_dimension(solver,dimension))
+    directions isa Vector{Float64} && (directions = [directions,0*directions,0*directions])
+    for data in generations
+        data.energy_boundaries == binding.energy_boundaries_MeV &&
+            data.dimension == dimension && data.widths == widths &&
+            data.boundary_conditions == get_boundary_conditions(geometry) &&
+            data.orders == orders && data.fully_coupled == coupling && data.is_csd == is_csd &&
+            data.directions == directions && data.weights == weights ||
+            error("Captured energy metadata differs from native binding, geometry or solver.")
+    end
+    crossing = get_outgoing_energy_current(fpp)
+    raw_escape = get_escaped_energy_current(fpp)
+    generation_escape = [get_escaped_energy_current(data) for data in generations]
+    verified = true
+    for data in generations
+        length(data.convergence) == length(binding.energy_boundaries_MeV)-1 ||
+            error("Captured convergence receipts do not match groups.")
+        for (group,row) in enumerate(data.convergence)
+            terminal_ok = row.terminal == :solver_tolerance ||
+                (row.terminal == :zero_source && row.iterations == 0 &&
+                    row.solver_residual == 0.0 && row.reconstruction_residual == 0.0 &&
+                    all(all(iszero,view(face,group,:,:,:,:)) for face in data.faces))
+            verified &= row.converged === true && terminal_ok &&
+                0 <= row.iterations <= row.iteration_cap &&
+                isfinite(row.tolerance) && row.tolerance > 0 &&
+                isfinite(row.solver_residual) && 0 <= row.solver_residual <= row.tolerance &&
+                isfinite(row.reconstruction_residual) && 0 <= row.reconstruction_residual <= row.tolerance
+        end
+        outer = data.outer_convergence[]
+        verified &= outer.converged === true && outer.required isa Bool &&
+            0 < outer.iterations <= outer.iteration_cap &&
+            isfinite(outer.tolerance) && outer.tolerance > 0 &&
+            isfinite(outer.residual) && 0 <= outer.residual <= outer.tolerance
+    end
+    if !verified
+        return merge(absent,(raw_crossing_energy_by_face_group_MeV=crossing,
+            raw_escaped_energy_by_face_group_MeV=raw_escape,
+            raw_escaped_energy_by_generation_MeV=generation_escape,
+            convergence_verified=false,escape_status=:unverified_native_convergence))
+    end
+    # Diagnose each generation before accumulation: a negative represented void
+    # observable cannot be legitimized by a positive later generation.
+    if any(any(<(0.0),score) for score in generation_escape)
+        return merge(absent,(raw_crossing_energy_by_face_group_MeV=crossing,
+            raw_escaped_energy_by_face_group_MeV=raw_escape,
+            raw_escaped_energy_by_generation_MeV=generation_escape,
+            convergence_verified=true,escape_status=:negative_integrated_void_energy))
+    end
+    divisor = _proton_accounting_scalar(get_normalization_factor(sources),"Escape source divisor";positive=true)
+    scale = 1.0
+    if physical_normalization !== nothing
+        physical_normalization.basis == basis || error("Escape physical and transport source bases differ.")
+        scale = get_physical_scale(physical_normalization)
+    end
+    multiplier = _proton_accounting_scalar(scale/divisor,"Escape normalization multiplier";positive=true)
+    escaped = raw_escape .* multiplier
+    all(isfinite,escaped) || error("Normalized escaped energy overflowed.")
+    total = _proton_accounting_scalar(sum(escaped),"Integrated escaped energy")
+    return (escaped_energy_MeV=total,escaped_energy_by_face_group_MeV=escaped,
+        raw_crossing_energy_by_face_group_MeV=crossing,raw_escaped_energy_by_face_group_MeV=raw_escape,
+        raw_escaped_energy_by_generation_MeV=generation_escape,
+        convergence_verified=true,
+        escape_status=:verified_native_capture,
+        escape_units="MeV per $(physical_normalization === nothing ? basis : :physical_rate)")
 end
 
 """
@@ -140,8 +228,9 @@ The optional numeric closure is software arithmetic only, with tolerance chosen
 by the caller. It never certifies physical validation or a stopping endpoint.
 """
 function proton_energy_accounting_report(score;injected_energy_MeV=missing,
-    escaped_energy_MeV=missing,secondary_transfer_MeV=missing,
-    other_transfer_MeV=missing,convergence_verified=missing,
+    escaped_energy_MeV=hasproperty(score,:escaped_energy_MeV) ? score.escaped_energy_MeV : missing,
+    secondary_transfer_MeV=missing,other_transfer_MeV=missing,
+    convergence_verified=hasproperty(score,:convergence_verified) ? score.convergence_verified : missing,
     closure_atol_MeV::Real=0.0,closure_rtol::Real=0.0)
     atol = _proton_accounting_scalar(closure_atol_MeV,"Closure absolute tolerance")
     rtol = _proton_accounting_scalar(closure_rtol,"Closure relative tolerance")
