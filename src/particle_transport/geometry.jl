@@ -33,6 +33,7 @@ function geometry(geo::Geometry,cs::Cross_Sections)
     # Compute positions and widths along x-axis
     Nx = sum(Nrx_voxels)
     xb = zeros(Nx+1)
+    xb[1] = xrb[1]
     Δx = zeros(Nx)
     x = zeros(Nx)
     ix = 0
@@ -90,6 +91,7 @@ function geometry(geo::Geometry,cs::Cross_Sections)
     # Compute positions and widths along x-axis
     Nx = sum(Nrx_voxels)
     xb = zeros(Nx+1)
+    xb[1] = xrb[1]
     Δx = zeros(Nx)
     x = zeros(Nx)
     irx = zeros(Int64,Nx)
@@ -110,6 +112,7 @@ function geometry(geo::Geometry,cs::Cross_Sections)
     # Compute positions and widths along y-axis
     Ny = sum(Nry_voxels)
     yb = zeros(Ny+1)
+    yb[1] = yrb[1]
     Δy = zeros(Ny)
     y = zeros(Ny)
     iry = zeros(Int64,Ny)
@@ -174,6 +177,7 @@ function geometry(geo::Geometry,cs::Cross_Sections)
     # Compute positions and widths along x-axis
     Nx = sum(Nrx_voxels)
     xb = zeros(Nx+1)
+    xb[1] = xrb[1]
     Δx = zeros(Nx)
     x = zeros(Nx)
     irx = zeros(Int64,Nx)
@@ -194,6 +198,7 @@ function geometry(geo::Geometry,cs::Cross_Sections)
     # Compute positions and widths along y-axis
     Ny = sum(Nry_voxels)
     yb = zeros(Ny+1)
+    yb[1] = yrb[1]
     Δy = zeros(Ny)
     y = zeros(Ny)
     iry = zeros(Int64,Ny)
@@ -214,6 +219,7 @@ function geometry(geo::Geometry,cs::Cross_Sections)
     # Compute positions and widths along z-axis
     Nz = sum(Nrz_voxels)
     zb = zeros(Nz+1)
+    zb[1] = zrb[1]
     Δz = zeros(Nz)
     z = zeros(Nz)
     irz = zeros(Int64,Nz)

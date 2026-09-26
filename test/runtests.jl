@@ -412,6 +412,8 @@ end
     end
 
 end
+include("geometry_origin_tests.jl")
+include("two_d_closure_tests.jl")
 include("hts_mapped_ion_tests.jl")
 include("proton_native_tests.jl")
 include("hts_multi_rebco_tests.jl")
