@@ -11,6 +11,7 @@ mutable struct Flux_Per_Particle
     flux                            ::Vector{Array{Float64,6}}
     flux_cutoff                     ::Vector{Array{Float64,5}}
     spectral_radius                 ::Vector{Vector{Float64}}
+    boundary_flux                   ::Vector{SN_Boundary_Flux}
 
     # Constructor(s)
     function Flux_Per_Particle(particle::Particle)
@@ -20,6 +21,7 @@ mutable struct Flux_Per_Particle
         this.flux = Vector{Array{Float64,6}}()
         this.flux_cutoff = Vector{Array{Float64,5}}()
         this.spectral_radius = Vector{Vector{Float64}}()
+        this.boundary_flux = SN_Boundary_Flux[]
 
         return this
     end
@@ -61,6 +63,7 @@ function add_flux(this::Flux_Per_Particle,flux_per_particle::Flux_Per_Particle)
     append!(this.flux,flux_per_particle.flux)
     append!(this.flux_cutoff,flux_per_particle.flux_cutoff)
     append!(this.spectral_radius,flux_per_particle.spectral_radius)
+    append!(this.boundary_flux,flux_per_particle.boundary_flux)
 end
 
 """
@@ -145,4 +148,25 @@ Get the total flux solution at cutoff for the particle.
 """
 function get_flux_cutoff(this::Flux_Per_Particle)
     return sum(this.flux_cutoff)
+end
+
+"""Return retained SN boundary generations. Missing generations explicitly reject scoring."""
+function get_boundary_flux(this::Flux_Per_Particle)
+    length(this.boundary_flux) == length(this.flux) && !isempty(this.boundary_flux) ||
+        error("Boundary flux was not retained for every generation; solve with retain_boundary_flux=true.")
+    return this.boundary_flux
+end
+
+"""Sum outward face/group crossing currents over all retained particle generations."""
+function get_outgoing_current(this::Flux_Per_Particle)
+    generations = get_boundary_flux(this)
+    first = generations[1]
+    for data in generations
+        data.dimension == first.dimension && data.directions == first.directions &&
+            data.weights == first.weights && data.widths == first.widths &&
+            data.energy_boundaries == first.energy_boundaries &&
+            data.boundary_conditions == first.boundary_conditions ||
+            error("Cannot accumulate boundary generations with different geometry or quadrature.")
+    end
+    return sum(get_outgoing_current(data) for data in generations)
 end

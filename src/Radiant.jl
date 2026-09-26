@@ -10,6 +10,7 @@ module Radiant
     using SpecialFunctions
 
     include("tools/julia_compat.jl")
+    include("particle_transport/sn_boundary_flux.jl")
 
     radiant_src = Dict{String,Vector{String}}()
     radiant_src["cross_sections/"] = [
@@ -85,6 +86,7 @@ module Radiant
         "Mapped_Structured_Geometry.jl",
         "Charged_Ion_Transport_Primitives.jl",
         "Proton_Native_Binding.jl",
+        "Proton_Energy_Accounting.jl",
         "Analytic_Curvature_Benchmark.jl",
         "Faceted_Geometry.jl",
         "Faceted_Local_Tape_Domain.jl",
@@ -118,6 +120,8 @@ module Radiant
     export Material,Cross_Sections,Geometry,SN,Solvers,Surface_Source,Volume_Source
     export set_provided_builder,set_transport_preflight
     export Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
+    export SN_Boundary_Flux,get_boundary_flux,get_outgoing_current
+    export boundary_source_fidelity,assert_boundary_source_fidelity
     export Discrete_Ordinates
 
     export Source_Normalization,get_physical_scale,get_duration,apply_normalization
@@ -197,6 +201,7 @@ module Radiant
     export synthetic_proton_transport_fixture
     export Proton_Material_Data,Proton_Nonelastic_Data,Proton_Native_Binding
     export bind_proton_native,proton_transport_preflight,proton_binding_receipt
+    export proton_cutoff_handoff,proton_energy_accounting,proton_energy_accounting_report
 
     export Cylindrical_Shell_Path_Result,cylindrical_shell_critical_cosine
     export cylindrical_shell_path,pure_absorption_fraction

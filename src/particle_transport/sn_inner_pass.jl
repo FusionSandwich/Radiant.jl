@@ -53,7 +53,7 @@ The pass is the affine map `T(z) = A·z + c` over the state `z = (𝚽l, boundar
 - `homogeneous = true` gives the linear part `A·z`, by dropping the fixed sources
   (`Qlout = 0`, `Np_source = 0`, zeroed incoming energy flux `𝚽E12`).
 """
-function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽y12_temp,𝚽z12_temp,𝚽E12_temp,Ql,Qlout,𝚽E12_in,Σt,Σs,mat,ndims,Nd,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,C,ω,sources,isAdapt,isCSD,solver,ΔE,S⁻,S⁺,S,T,ℳ,is_EM,ℳ_EM,𝒲,boundary_conditions,Np_source;homogeneous::Bool)
+function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽y12_temp,𝚽z12_temp,𝚽E12_temp,Ql,Qlout,𝚽E12_in,Σt,Σs,mat,ndims,Nd,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,C,ω,sources,isAdapt,isCSD,solver,ΔE,S⁻,S⁺,S,T,ℳ,is_EM,ℳ_EM,𝒲,boundary_conditions,Np_source;homogeneous::Bool,boundary_capture=nothing)
 
     if homogeneous
         Ql .= 0.0
@@ -77,6 +77,8 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
 
     𝚽l .= 0
     for n in range(1,Nd)
+        capture_n = boundary_capture === nothing ? nothing :
+            (boundary_capture[1],boundary_capture[2],n)
         if isCSD
             𝚽E12_out = 𝚽E12_eff[n,:,:,:,:]
         else
@@ -99,7 +101,7 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
                 𝚽l[:,:,:,1,1],Ql[:,:,:,1,1],Σt,mat[:,1,1],Ns[1],Δs[1],Ω[1][n],
                 Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Np_surf,𝒪,Nm,C,ω,sources,isAdapt,
                 isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,isFC,𝚽x12_in,boundary_conditions,
-                Np_source_eff,
+                Np_source_eff;boundary_capture=capture_n,
             )
         elseif ndims == 2
             nx⁻ = n_to_n⁺[1][n]
@@ -130,7 +132,7 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
                 𝚽l[:,:,:,:,1],Ql[:,:,:,:,1],Σt,mat[:,:,1],Ns[1:2],Δs[1:2],
                 [Ω[1][n],Ω[2][n]],Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Mny⁻,Dny⁻,
                 Np_surf,𝒪,Nm,C,ω,sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,
-                isFC,𝚽x12_in,𝚽y12_in,boundary_conditions,Np_source_eff,
+                isFC,𝚽x12_in,𝚽y12_in,boundary_conditions,Np_source_eff;boundary_capture=capture_n,
             )
         elseif ndims == 3
             nx⁻ = n_to_n⁺[1][n]
@@ -173,7 +175,7 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
                 𝚽l,Ql,Σt,mat,Ns,Δs,[Ω[1][n],Ω[2][n],Ω[3][n]],Mn[n,:],
                 Dn[:,n],Np,Mnx⁻,Dnx⁻,Mny⁻,Dny⁻,Mnz⁻,Dnz⁻,Np_surf,𝒪,Nm,C,ω,
                 sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,isFC,𝚽x12_in,
-                𝚽y12_in,𝚽z12_in,boundary_conditions,Np_source_eff,
+                𝚽y12_in,𝚽z12_in,boundary_conditions,Np_source_eff;boundary_capture=capture_n,
             )
         else
             error("Dimension is not 1, 2 or 3.")

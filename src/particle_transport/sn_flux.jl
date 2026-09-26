@@ -92,7 +92,8 @@ function compute_flux(
     geometry::Geometry,
     solver::SN,
     source::Source,
-    electromagnetic_field::Electromagnetic_Field=Electromagnetic_Field(),
+    electromagnetic_field::Electromagnetic_Field=Electromagnetic_Field();
+    retain_boundary_flux::Bool=false,
 )
     Ndims = get_dimension(geometry)
     geo_type = get_type(geometry)
@@ -206,6 +207,9 @@ function compute_flux(
     ϵ_max = get_convergence_criterion(solver)
     I_max = get_maximum_iteration(solver)
     𝚽l = zeros(Ng,Np,Nm[5],Ns[1],Ns[2],Ns[3])
+    boundary_flux = retain_boundary_flux ? SN_Boundary_Flux(
+        Ndims,Ω,w,Δs,get_energy_boundaries(cross_sections,part),boundary_conditions,Ng,Nm,
+    ) : nothing
     if is_CSD
         𝚽cutoff = zeros(Np,Nm[5],Ns[1],Ns[2],Ns[3])
     end
@@ -267,7 +271,8 @@ function compute_flux(
                 isFC,𝒞,ω,I_max,ϵ_max,surface_sources[ig,:,:],is_adaptive,is_CSD,
                 solver_type,ΔEg,𝚽E12,Sg⁻,Sg⁺,Sg,Tg,ℳ,𝒜,Ntot,is_EM,
                 electromagnetic_group,𝒲,boundary_conditions,Np_source,gmres_restart,
-                anderson_depth,
+                anderson_depth;
+                boundary_flux=boundary_flux,
             )
         end
 
@@ -294,5 +299,8 @@ function compute_flux(
         add_flux_cutoff(particle_flux,𝚽cutoff)
     end
     add_spectral_radius(particle_flux,ρ_in)
+    if boundary_flux !== nothing
+        push!(particle_flux.boundary_flux,boundary_flux)
+    end
     return particle_flux
 end

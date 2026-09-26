@@ -407,6 +407,133 @@ function project_boundary_source(
     return projected_source,receipt
 end
 
+"""
+    boundary_source_fidelity(source, projected_source, cross_sections, geometry, solver)
+
+Independently compare the intended incoming current distribution with the angular flux
+reconstructed from an installed SN surface array. Extensive current masses include patch area,
+quadrature weight and inward normal cosine. First and second moments are normalized by current,
+not scalar fluence. `distribution_l1_error` is the absolute ordinate current-mass difference
+divided by intended current (or `current_atol` for an empty group); for equal positive currents
+it is twice total variation. All arrays use Radiant energy-group order.
+
+This diagnostic does not change projection or physics gates. Supply the contribution from this
+source alone, or a source describing the complete summed array. Negative reconstruction is
+reported without clipping. In 1D the transverse embedding is a convention, not azimuthal truth.
+Energy intervals must match exactly; no intragroup energy shape is inferred.
+"""
+function boundary_source_fidelity(
+    source::Boundary_Angular_Current_Source,
+    projected_source,
+    cross_sections::Cross_Sections,
+    geometry::Geometry,
+    solver::SN;
+    current_atol::Real=1.0e-12,
+)
+    isfinite(current_atol) && current_atol > 0 || error("current_atol must be finite and positive.")
+    geometry.is_build || error("Geometry must be built before source fidelity assessment.")
+    get_tag(source.particle) == get_tag(get_particle(solver)) || error("Source and solver particles differ.")
+    groups = _energy_group_map(source.energy_edges_eV,cross_sections,source.particle)
+    Ng = get_number_of_groups(cross_sections,_stored_particle(cross_sections,source.particle))
+    Ω,w,directions,Qdims = _solver_quadrature(solver,geometry)
+    mapping = _direction_map(source.directions,source.quadrature_weights,directions,w)
+    Np,Mn,_,incoming_indices,_,_,_ = surface_angular_polynomial_basis(
+        Ω,w,get_legendre_order(solver),get_angular_boltzmann(solver),Qdims,
+        get_dimension(geometry),get_type(geometry),
+    )
+    size(projected_source) == (Ng,Np,2*get_dimension(geometry)) || error("Surface array does not match the selected SN basis.")
+    Npatch = length(source.patch_ids)
+    Nd = length(w)
+    target_mass = zeros(Float64,Npatch,Ng,Nd)
+    reconstructed_mass = zeros(Float64,Npatch,Ng,Nd)
+    target_first = zeros(Float64,Npatch,Ng,3)
+    reconstructed_first = zeros(Float64,Npatch,Ng,3)
+    target_second = zeros(Float64,Npatch,Ng,3,3)
+    reconstructed_second = zeros(Float64,Npatch,Ng,3,3)
+    min_flux = zeros(Float64,Npatch,Ng)
+    occupied = Set{Tuple{Int64,NTuple{3,Int64}}}()
+    Ndims = get_dimension(geometry)
+    for patch in 1:Npatch
+        boundary,cell,area = _cartesian_patch_location(
+            geometry,view(source.centroids_cm,patch,:),view(source.normals,patch,:),source.areas_cm2[patch],
+        )
+        key = (boundary,cell)
+        key in occupied && error("Multiple source patches map to one boundary-cell face.")
+        push!(occupied,key)
+        incoming = incoming_indices[boundary]
+        for sg in axes(source.angular_flux,2)
+            g = groups[sg]
+            # Intended masses are evaluated directly from the source schema, not Dn or a receipt.
+            for sd in axes(source.angular_flux,3)
+                cosine = max(0.0,-dot(view(source.directions,sd,:),view(source.normals,patch,:)))
+                target_mass[patch,g,mapping[sd]] = area*source.quadrature_weights[sd]*cosine*source.angular_flux[patch,sg,sd]
+            end
+        end
+        for g in 1:Ng
+            coefficients = [Ndims == 1 ? projected_source[g,p,boundary] :
+                (Ndims == 2 ? projected_source[g,p,boundary][cell[1]] :
+                projected_source[g,p,boundary][cell[1],cell[2]]) for p in 1:Np]
+            flux = Mn[boundary]*coefficients
+            all(isfinite,flux) || error("Reconstructed boundary flux is nonfinite.")
+            min_flux[patch,g] = minimum(flux)
+            for (i,d) in enumerate(incoming)
+                cosine = max(0.0,-dot(view(directions,d,:),view(source.normals,patch,:)))
+                reconstructed_mass[patch,g,d] = area*w[d]*cosine*flux[i]
+            end
+            for (masses,first,second) in ((target_mass,target_first,target_second),
+                                         (reconstructed_mass,reconstructed_first,reconstructed_second))
+                total = sum(view(masses,patch,g,:))
+                # Zero-current moments have no directional meaning; leave them zero and use
+                # absolute mass/current closure to reject any spurious injection.
+                total > current_atol || continue
+                for d in 1:Nd, a in 1:3
+                    first[patch,g,a] += masses[patch,g,d]*directions[d,a]/total
+                    for b in 1:3
+                        second[patch,g,a,b] += masses[patch,g,d]*directions[d,a]*directions[d,b]/total
+                    end
+                end
+            end
+        end
+    end
+    target_current = dropdims(sum(target_mass;dims=3);dims=3)
+    reconstructed_current = dropdims(sum(reconstructed_mass;dims=3);dims=3)
+    distribution_l1 = dropdims(sum(abs.(target_mass.-reconstructed_mass);dims=3);dims=3) ./ max.(target_current,Float64(current_atol))
+    first_error = dropdims(maximum(abs.(target_first.-reconstructed_first);dims=3);dims=3)
+    second_error = dropdims(maximum(abs.(target_second.-reconstructed_second);dims=(3,4));dims=(3,4))
+    return (
+        energy_group_map=groups, direction_map=mapping,
+        target_directional_current=target_mass, reconstructed_directional_current=reconstructed_mass,
+        target_current=target_current, reconstructed_current=reconstructed_current,
+        target_first_moment=target_first, reconstructed_first_moment=reconstructed_first,
+        target_second_moment=target_second, reconstructed_second_moment=reconstructed_second,
+        distribution_l1_error=distribution_l1, first_moment_error=first_error,
+        second_moment_error=second_error, minimum_reconstructed_flux=min_flux,
+        max_current_relative_error=_maximum_relative_error(target_current,reconstructed_current,current_atol),
+        source_hash=source.normalization.source_hash,
+    )
+end
+
+"""Opt-in fidelity assertion; tolerances are dimensionless and must be preregistered by callers.
+The positivity tolerance is an absolute angular-flux tolerance. This is a software diagnostic,
+not a physical source qualification or a change to the default source projection contract.
+"""
+function assert_boundary_source_fidelity(diagnostic;
+    current_rtol::Real=1.0e-10, distribution_l1_atol::Real=1.0e-10,
+    first_moment_atol::Real=1.0e-10, second_moment_atol::Real=1.0e-10,
+    positivity_atol::Real=1.0e-12,
+)
+    tolerances = (current_rtol,distribution_l1_atol,first_moment_atol,second_moment_atol,positivity_atol)
+    all(t -> isfinite(t) && t ≥ 0,tolerances) || error("Fidelity tolerances must be finite and nonnegative.")
+    values = (diagnostic.max_current_relative_error,maximum(diagnostic.distribution_l1_error),
+        maximum(diagnostic.first_moment_error),maximum(diagnostic.second_moment_error),
+        -minimum(diagnostic.minimum_reconstructed_flux))
+    all(isfinite,values) || error("Source fidelity diagnostics are nonfinite.")
+    all(values[i] ≤ tolerances[i] for i in eachindex(values)) || error(
+        "Boundary-source fidelity failed: current, ordinate distribution, angular moments or positivity exceed tolerance.",
+    )
+    return true
+end
+
 function _linear_voxel_index(geometry::Geometry,voxel_id::Int64)
     Nx = geometry.number_of_voxels["x"]
     Ny = get_dimension(geometry) ≥ 2 ? geometry.number_of_voxels["y"] : 1

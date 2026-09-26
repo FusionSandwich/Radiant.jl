@@ -19,7 +19,7 @@ Solve transport calculations.
 N/A
 
 """
-function transport(cross_sections::Cross_Sections,geometry::Geometry,solvers::Solvers,sources::Fixed_Sources,electromagnetic_field::Electromagnetic_Field=Electromagnetic_Field())
+function transport(cross_sections::Cross_Sections,geometry::Geometry,solvers::Solvers,sources::Fixed_Sources,electromagnetic_field::Electromagnetic_Field=Electromagnetic_Field();retain_boundary_flux::Bool=false)
 
 if !isnothing(cross_sections.transport_preflight)
     cross_sections.transport_preflight(
@@ -43,9 +43,12 @@ if Npart == 1
 
     # Transport
     method = solvers.get_method(particle)
+    retain_boundary_flux && !(method isa SN) && error("Outgoing boundary retention currently supports SN solvers only.")
     fixed_source = sources.get_source(particle)
 
-    particle_flux = compute_flux(cross_sections,geometry,method,fixed_source,electromagnetic_field)
+    particle_flux = retain_boundary_flux ?
+        compute_flux(cross_sections,geometry,method,fixed_source,electromagnetic_field;retain_boundary_flux=true) :
+        compute_flux(cross_sections,geometry,method,fixed_source,electromagnetic_field)
     flux.add_flux(particle_flux)
 
 #----
@@ -60,6 +63,7 @@ else
     method = Vector{Solver}(undef,Npart)
     for i in range(1,Npart)
         method[i] = solvers.get_method(particles[i])
+        retain_boundary_flux && !(method[i] isa SN) && error("Outgoing boundary retention currently supports SN solvers only.")
         fixed_source[i] = sources.get_source(particles[i])
         particle_sources[i] = Source(particles[i],cross_sections,geometry,method[i])
     end
@@ -97,7 +101,9 @@ else
             if n == 1 source += fixed_source[i] end
 
             # Transport
-            particle_flux = compute_flux(cross_sections,geometry,method[i],source,electromagnetic_field)
+            particle_flux = retain_boundary_flux ?
+                compute_flux(cross_sections,geometry,method[i],source,electromagnetic_field;retain_boundary_flux=true) :
+                compute_flux(cross_sections,geometry,method[i],source,electromagnetic_field)
             flux.add_flux(particle_flux)
 
             # Compute scattered particles sources

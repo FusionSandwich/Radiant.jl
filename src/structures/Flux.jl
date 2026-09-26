@@ -121,3 +121,17 @@ function get_spectral_radius(this::Flux,particle::Particle)
     index = findfirst(x -> get_tag(x) == get_tag(particle),this.particles)
     return this.flux_per_particle[index].get_spectral_radius()
 end
+
+"""Get retained outgoing SN boundary generations for the specified particle."""
+function get_boundary_flux(this::Flux,particle::Particle)
+    index = findfirst(x -> get_tag(x) == get_tag(particle),this.particles)
+    index === nothing && error("No data for the specified particle.")
+    return get_boundary_flux(this.flux_per_particle[index])
+end
+
+"""Get generation-summed outward crossing current by face and energy group."""
+function get_outgoing_current(this::Flux,particle::Particle)
+    index = findfirst(x -> get_tag(x) == get_tag(particle),this.particles)
+    index === nothing && error("No data for the specified particle.")
+    return get_outgoing_current(this.flux_per_particle[index])
+end

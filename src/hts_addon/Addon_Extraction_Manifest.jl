@@ -231,11 +231,15 @@ function default_hts_addon_extraction_manifest()
         ),
         HTS_Addon_Component(
             :proton_native_binding,
-            ["src/hts_addon/Proton_Native_Binding.jl"];
+            [
+                "src/hts_addon/Proton_Native_Binding.jl",
+                "src/hts_addon/Proton_Energy_Accounting.jl",
+            ];
             core_dependencies=["Cross_Sections provided builder","transport preflight",
-                "Charged_Ion_Transport_Primitives","Process_Resolved_Scoring"],
+                "Charged_Ion_Transport_Primitives","Process_Resolved_Scoring",
+                "Flux","Discrete_Ordinates","Source_Normalization"],
             status=:ready_to_extract,
-            notes="Binds domain- and provenance-checked manufactured proton tables to native SN CSD; nonzero nonelastic production and physical qualification remain blocked.",
+            notes="Binds domain- and provenance-checked manufactured proton tables to native SN CSD and accounts for the native cutoff particle and energy handoff. Electronic deposition, recoil, and residual cutoff energy remain separate; complete escaped/secondary energy, nonzero nonelastic production, and physical qualification remain blocked.",
         ),
         HTS_Addon_Component(
             :faceted_geometry,
