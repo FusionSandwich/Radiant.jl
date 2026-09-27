@@ -2,7 +2,25 @@
 
 ## Boundary and native ownership
 
+Proton support extends the existing multigroup Boltzmann Fokker-Planck method:
+the shared SN sweeps, space/energy closure relations, angular operators and
+cross-section/response interfaces remain the production framework. Proton
+interaction models supply coefficients and response data to that framework.
+Existing DD, DG and admitted AWD closures should be assessed before proposing
+a new positivity treatment. Any generic numerical change also needs regression
+evidence for the existing charged particles. See [Bienvenue and Hebert (2022)](https://doi.org/10.1016/j.anucene.2022.109032)
+and [Bienvenue et al. (2025)](https://publications.polymtl.ca/61927/) for the
+method lineage; their lepton validation does not validate proton physics.
+
 The contract is 1–500 MeV **kinetic energy per proton**. Every source group, material-state table and production kernel must cover its requested interval without extrapolation. `Proton()` uses native Radiant particle identity. `Cross_Sections.build` owns binding to native multigroup coefficients; `SN` with CSD/BFP/FP owns the charged transport sweep, electronic stopping, optional nuclear-stopping energy transfer, field coupling, and Cartesian layer-resolved scores. `Proton_Native_Binding.jl` is the HTS adapter and preflight, not a second stepper. The standalone `ion_transport_step` remains a software fixture.
+
+Nonzero angular variance requires the native BFP or FP angular Fokker-Planck
+operator. BFP-EF does not apply that operator and accepts only zero angular
+variance in this binding. Nonzero energy straggling rejects because a native
+energy-straggling operator is not connected. A schema field or a standalone
+step utility does not establish that the native transport applies its physics.
+Angular-operator monotonicity also does not guarantee nonnegative space/energy
+flux reconstruction.
 
 The present executable slice uses an explicit synthetic zero nonelastic declaration and a native CSD solve. It does **not** claim a physical proton solve. The native adapter stores electronic deposition separately from nuclear-stopping recoil energy. Nuclear recoil energy is a handoff channel, not instant heat. The current binding rejects a nonzero nonelastic removal coefficient because no coupled production matrix and correlated event handoff are yet connected. A future producer must supply both before a solve can continue.
 

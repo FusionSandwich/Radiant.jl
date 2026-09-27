@@ -284,7 +284,12 @@ function proton_transport_preflight(binding::Proton_Native_Binding,cs::Cross_Sec
     solver_type,is_csd = get_solver_type(solver)
     is_csd || error("Proton stopping requires a native CSD-capable solver.")
     angular = any(any(>(0.0),data.model.angular_variance_rad2_cm) for data in binding.material_data)
-    angular && !(solver_type in (2,4,6)) && error("Nonzero angular variance requires a BFP/FP solver.")
+    angular && !(solver_type in (2,4)) && error(
+        "Nonzero proton angular variance requires native BFP or FP with the angular Fokker-Planck operator.",
+    )
+    straggling = any(any(>(0.0),data.model.energy_straggling_variance_MeV2_cm)
+        for data in binding.material_data)
+    straggling && error("Nonzero proton energy straggling has no native transport operator.")
     any(any(>(0.0),data.removal_cm_inv) for data in binding.nonelastic_data) && error(
         "Nonzero proton nonelastic removal has no bound production matrix and correlated event handoff.",
     )

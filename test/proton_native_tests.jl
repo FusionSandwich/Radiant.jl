@@ -2,6 +2,7 @@ using SHA
 using TOML
 
 function _manufactured_proton_case(;nuclear_stopping=0.0,angular_variance=0.0,
+    energy_straggling=0.0,energy_straggling_by_layer=nothing,
     nonelastic_removal=0.0,field_T=0.0,solver_type="CSD",
     qualification_mode=:software,electronic_stopping_by_layer=(2.0,2.0),
     group_boundaries_MeV=[500.0,1.0],source_values=[1.0],
@@ -15,11 +16,15 @@ function _manufactured_proton_case(;nuclear_stopping=0.0,angular_variance=0.0,
         Radiant.set_density(material,1.0)
         push!(materials,material)
         hash = bytes2hex(sha256("$id/stopping/linear/1-500"))
+        straggling = isnothing(energy_straggling_by_layer) ?
+            fill(Float64(energy_straggling),2) :
+            collect(Float64.(energy_straggling_by_layer[layer]))
+        length(straggling) == 2 || error("Manufactured straggling table needs two energy nodes.")
         model = Tabulated_Ion_Transport_Model(
             species_id="proton",material_id=id,energy_MeV=[1.0,500.0],
             electronic_stopping_MeV_cm=fill(electronic_stopping_by_layer[layer],2),
             nuclear_stopping_MeV_cm=[nuclear_stopping,nuclear_stopping],
-            energy_straggling_variance_MeV2_cm=[0.0,0.0],
+            energy_straggling_variance_MeV2_cm=straggling,
             angular_variance_rad2_cm=[angular_variance,angular_variance],
             data_hash=hash,qualification_status=:synthetic,
         )
@@ -86,6 +91,64 @@ function _manufactured_proton_case(;nuclear_stopping=0.0,angular_variance=0.0,
     Radiant.set_magnetic_field(field,[0.0,0.0,field_T])
     Radiant.set_electromagnetic_field(cu,field)
     return cu,binding,proton
+end
+
+function _test_exact_error(expected::AbstractString,thunk::Function)
+    try
+        thunk()
+    catch err
+        @test err isa ErrorException
+        @test sprint(showerror,err) == expected
+        return
+    end
+    @test false
+end
+
+@testset "Proton preflight rejects unsupported supplied moments" begin
+    angular_error = "Nonzero proton angular variance requires native BFP or FP with the angular Fokker-Planck operator."
+    straggling_error = "Nonzero proton energy straggling has no native transport operator."
+
+    for (solver_type,angular,straggling,expected) in (
+        ("BFP-EF",0.001,0.0,angular_error),
+        ("CSD",0.0,0.001,straggling_error),
+        ("BFP",0.001,0.001,straggling_error),
+    )
+        cu,binding,proton = _manufactured_proton_case(
+            solver_type=solver_type,angular_variance=angular,
+            energy_straggling=straggling)
+        _test_exact_error(expected,() -> Radiant.run(cu))
+        _test_exact_error(expected,() -> proton_transport_preflight(
+            binding,binding.cross_sections,cu.geometry,cu.solvers,cu.sources,
+            cu.electromagnetic_field))
+    end
+
+    cu_late,binding_late,proton_late = _manufactured_proton_case(
+        group_boundaries_MeV=[500.0,250.0,1.0],
+        source_values=[0.0,1.0],
+        energy_straggling_by_layer=((0.0,0.0),(0.0,0.001)))
+    _test_exact_error(straggling_error,() -> Radiant.run(cu_late))
+    _test_exact_error(straggling_error,() -> proton_transport_preflight(
+        binding_late,binding_late.cross_sections,cu_late.geometry,cu_late.solvers,
+        cu_late.sources,cu_late.electromagnetic_field))
+
+    cu_fp,binding_fp,proton_fp = _manufactured_proton_case(
+        solver_type="FP",angular_variance=0.001)
+    Radiant.build(cu_fp.sources)
+    @test proton_transport_preflight(binding_fp,binding_fp.cross_sections,
+        cu_fp.geometry,cu_fp.solvers,cu_fp.sources,cu_fp.electromagnetic_field)
+
+    cu_csd,_,proton_csd = _manufactured_proton_case()
+    Radiant.run(cu_csd)
+    cu_bfpef,binding_bfpef,proton_bfpef = _manufactured_proton_case(
+        solver_type="BFP-EF")
+    Radiant.build(cu_bfpef.sources)
+    @test proton_transport_preflight(binding_bfpef,binding_bfpef.cross_sections,
+        cu_bfpef.geometry,cu_bfpef.solvers,cu_bfpef.sources,
+        cu_bfpef.electromagnetic_field)
+    Radiant.run(cu_bfpef)
+    @test Radiant.get_flux(cu_bfpef,proton_bfpef) ≈
+        Radiant.get_flux(cu_csd,proton_csd)
+    @test all(isfinite,Radiant.get_flux(cu_bfpef,proton_bfpef))
 end
 
 @testset "Native manufactured proton binding" begin
