@@ -60,6 +60,7 @@ makedocs(
             "9 Transport Calculations"       => "user_guide_transport_calculations.md",
             "Proton capability audit"         => "proton_transport_capability_audit.md",
             "Proton transport requirements"   => "proton_transport_requirements.md",
+            "Proton energy sources and balance" => "proton_energy_sources.md",
         ],
 
         #"Examples" => [],

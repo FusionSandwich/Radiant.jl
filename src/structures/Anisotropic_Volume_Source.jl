@@ -149,6 +149,135 @@ end
 get_particle(this::Anisotropic_Volume_Source) = this.particle
 get_source_normalization(this::Anisotropic_Volume_Source) = this.normalization
 
+# Normalized Legendre polynomials, in ascending powers of the physical energy
+# coordinate u=(2E-Ehi-Elo)/(Ehi-Elo). The public first increment is DG1--DG4.
+const _source_energy_power_basis = (
+    [1.0], [0.0,sqrt(3.0)], [-sqrt(5.0)/2,0.0,3sqrt(5.0)/2],
+    [0.0,-3sqrt(7.0)/2,0.0,5sqrt(7.0)/2],
+)
+
+function _source_energy_polynomial_diagnostic(moments)
+    1 <= length(moments) <= 4 || error("Energy source supports one to four explicit modes.")
+    powers = zeros(Float64,4)
+    for k in eachindex(moments), j in eachindex(_source_energy_power_basis[k])
+        powers[j] += moments[k] * _source_energy_power_basis[k][j]
+    end
+    all(isfinite,powers) || error("Represented energy polynomial overflowed.")
+    scale = max(maximum(abs,powers),maximum(abs,moments))
+    scale == 0.0 && return (minimum=0.0,roundoff_bound=0.0)
+    # Normalize before solving the derivative: finite large coefficients must
+    # not overflow the quadratic discriminant and hide an interior minimum.
+    powers ./= scale
+    candidates = [-1.0,1.0]
+    a,b,c = 3powers[4],2powers[3],powers[2]
+    if a == 0.0
+        b != 0.0 && -1.0 <= -c/b <= 1.0 && push!(candidates,-c/b)
+    else
+        discriminant = b*b-4a*c
+        isfinite(discriminant) || error("Energy-source derivative discriminant is nonfinite.")
+        if discriminant >= 0.0
+            q = -0.5*(b+copysign(sqrt(discriminant),b))
+            roots = q == 0.0 ? [-b/(2a)] : [q/a,c/q]
+            # A finite near-quadratic cubic can have an unrepresentably distant
+            # root. +/-Inf is outside [-1,1]; NaN cannot classify a stationary point.
+            any(isnan,roots) && error("Energy-source derivative roots are undefined.")
+            for u in roots
+                -1.0 <= u <= 1.0 && push!(candidates,u)
+            end
+        end
+    end
+    raw_minimum = scale*minimum(((powers[4]*u+powers[3])*u+powers[2])*u+powers[1] for u in candidates)
+    # This bounds a numerically unresolved sign near a tangential zero. It is
+    # reported, never used to clip moments or adjust transport positivity.
+    roundoff_bound = scale*(64eps(Float64)*sum(abs(moments[k]/scale)*sum(abs,_source_energy_power_basis[k]) for k in eachindex(moments)))
+    isfinite(raw_minimum) && isfinite(roundoff_bound) || error("Energy-source positivity diagnostic is nonfinite.")
+    return (minimum=raw_minimum,roundoff_bound=roundoff_bound)
+end
+
+_source_energy_polynomial_minimum(moments) = _source_energy_polynomial_diagnostic(moments).minimum
+
+"""
+    source_energy_moments(energy_edges_eV, local_power_coefficients; energy_order)
+
+Exactly integrate a declared intragroup polynomial into normalized energy Legendre moments.
+Input has shape `(entity, ascending energy group, angular coefficient, power)` with ascending
+powers of `u=(2E-Ehi-Elo)/(Ehi-Elo)`. Coefficients are differential densities per eV. Output has
+the same first three dimensions and `energy_order` modes, with
+`Qk = integral_bin q(E)*sqrt(2k+1)*Pk(u) dE`. Q0 is the exact group integral.
+One to four modes are supported; every polynomial power must be represented. No quadrature,
+clipping, normalization or inference of missing polynomial coefficients is performed.
+"""
+function source_energy_moments(edges_eV::AbstractVector{<:Real},
+    coefficients::AbstractArray{<:Real,4}; energy_order::Integer=size(coefficients,4))
+    edges = Float64.(edges_eV)
+    1 <= energy_order <= 4 || error("Energy source order must lie between one and four.")
+    1 <= size(coefficients,4) <= energy_order || error("Polynomial powers exceed the declared energy order.")
+    length(edges) >= 2 && all(isfinite,edges) && all(edges .>= 0.0) && all(diff(edges) .> 0.0) ||
+        error("Energy boundaries must be finite, nonnegative and strictly increasing.")
+    size(coefficients,2) == length(edges)-1 || error("Polynomial energy groups do not match the boundaries.")
+    size(coefficients,1) > 0 && size(coefficients,3) > 0 && all(isfinite,coefficients) ||
+        error("Polynomial source coefficients must be finite and nonempty.")
+    output = zeros(Float64,size(coefficients,1),size(coefficients,2),size(coefficients,3),energy_order)
+    for entity in axes(output,1), group in axes(output,2), angular in axes(output,3)
+        width = edges[group+1]-edges[group]
+        a = [power <= size(coefficients,4) ? Float64(coefficients[entity,group,angular,power]) : 0.0 for power in 1:4]
+        # Analytic integrals avoid cancellation in orthogonal modes of a lower
+        # degree polynomial, which are exactly zero.
+        output[entity,group,angular,1] = width*(a[1]+a[3]/3)
+        energy_order >= 2 && (output[entity,group,angular,2] = width*(a[2]/sqrt(3.0)+sqrt(3.0)*a[4]/5))
+        energy_order >= 3 && (output[entity,group,angular,3] = width*(2sqrt(5.0)*a[3]/15))
+        energy_order >= 4 && (output[entity,group,angular,4] = width*(2sqrt(7.0)*a[4]/35))
+    end
+    all(isfinite,output) || error("Integrated source moments overflowed.")
+    return output
+end
+
+"""
+    Energy_Moment_Volume_Source(source, energy_moments)
+
+Public energy-resolved wrapper for an existing explicitly normalized volume source. Moments have
+shape `(voxel, ascending energy group, angular coefficient, energy mode)` in the normalized,
+group-integrated convention documented by `source_energy_moments`. Q0 must equal `source.values`
+exactly. Higher coefficients may be signed; the represented differential source must remain
+nonnegative over each complete energy interval, allowing only a reported scale-dependent
+floating-point roundoff bound at a numerically unresolved zero. No coefficient is clipped.
+Angular moment data are checked after native
+angular reconstruction during projection. One to four modes are supported, with no silent
+truncation or zero-padding at transport. Sources remain spatially constant within each voxel.
+
+Use `Fixed_Sources` or `project_volume_source` to project the wrapper; do not alter native arrays.
+The selected SN CSD-family solver must use DG energy with exactly the supplied number of modes.
+Serialization through the legacy three-dimensional source interchange is unsupported and must
+not discard this wrapper's higher modes. Physical source-rate scaling retains the base contract.
+"""
+struct Energy_Moment_Volume_Source <: Abstract_Radiant_Source
+    source::Anisotropic_Volume_Source
+    energy_moments::Array{Float64,4}
+    function Energy_Moment_Volume_Source(source::Anisotropic_Volume_Source,
+        energy_moments::AbstractArray{<:Real}; positivity_tolerance::Real=0.0)
+        ndims(energy_moments) == 4 || error("Energy source moments must have four dimensions.")
+        size(energy_moments)[1:3] == size(source.values) || error("Energy source moment dimensions must match the base source.")
+        1 <= size(energy_moments,4) <= 4 || error("Energy source requires one to four explicit modes.")
+        positivity_tolerance == 0 || error("Energy source positivity is strict; a negative allowance is unsupported.")
+        moments = Float64.(energy_moments)
+        all(isfinite,moments) || error("Energy source moments must be finite.")
+        moments[:,:,:,1] == source.values || error("Zeroth energy moments must equal the declared exact group integrals.")
+        if source.angular_representation != :moments
+            for voxel in axes(moments,1), group in axes(moments,2), angular in axes(moments,3)
+                diagnostic = _source_energy_polynomial_diagnostic(view(moments,voxel,group,angular,:))
+                diagnostic.minimum >= -diagnostic.roundoff_bound ||
+                    error("Represented energy source has a negative differential value.")
+            end
+        end
+        return new(deepcopy(source),moments)
+    end
+end
+
+get_particle(this::Energy_Moment_Volume_Source) = get_particle(this.source)
+get_source_normalization(this::Energy_Moment_Volume_Source) = get_source_normalization(this.source)
+get_volume_source_rate(this::Energy_Moment_Volume_Source;physical::Bool=false) =
+    get_volume_source_rate(this.source;physical=physical)
+
 """
     get_volume_source_rate(this::Anisotropic_Volume_Source; physical=false)
 

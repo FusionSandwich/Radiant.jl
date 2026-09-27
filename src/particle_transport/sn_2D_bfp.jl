@@ -90,7 +90,8 @@ for ix in range(1,𝒪x), jx in range(1,𝒪x), iy in range(1,𝒪y), jy in rang
     # CSD term
     if ix == jx && iy == jy
         for kE in range(1,iE-1), wE in range(1,𝒪E)
-            𝒮[i,j] += C[iE] * C[jE] * C[kE] * C[wE] * (1-(-1)^(iE-kE)) * S[wE] * 𝒲[jE,kE,wE]
+            # P_i' contains (2k-1)P_(k-1): the derivative expansion uses C[k]^2.
+            𝒮[i,j] += C[iE] * C[jE] * C[kE]^2 * C[wE] * (1-(-1)^(iE-kE)) * S[wE] * 𝒲[jE,kE,wE]
         end
         𝒮[i,j] += C[iE] * S⁺ * (-1)^(iE-1) * C[jE] * (-1)^(jE-1) * ωE[jE+1,jx,jy]
     end

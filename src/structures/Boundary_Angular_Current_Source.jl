@@ -48,7 +48,11 @@ struct Boundary_Angular_Current_Source <: Abstract_Radiant_Source
         provenance::AbstractDict = Dict{String,String}(),
         frame_tolerance::Real = 1.0e-8,
         source_tolerance::Real = 1.0e-14,
+        energy_moments = nothing,
     )
+        isnothing(energy_moments) || error(
+            "Boundary energy moments are unsupported by the native boundary sweep; only group-integrated P0 boundary flux is supported.",
+        )
         ids = Int64.(patch_ids)
         centroids = Float64.(centroids_cm)
         areas = Float64.(areas_cm2)

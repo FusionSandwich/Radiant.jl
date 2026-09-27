@@ -52,7 +52,7 @@ module Radiant
     ]
     radiant_src["structures/"] = [
         "Particle.jl","Source_Normalization.jl","Boundary_Angular_Current_Source.jl",
-        "Anisotropic_Volume_Source.jl","Transport_Balance.jl",
+        "Anisotropic_Volume_Source.jl","Energy_Source_Observables.jl","Transport_Balance.jl",
         "Transport_Ownership_Map.jl","Layer_Definition.jl","Tape_Stack_Definition.jl",
         "Energy_Partition.jl","Fibre_Diagnostic_Definition.jl",
         "HTS_Detector_Definition.jl","Physics_Coverage_Register.jl",
@@ -130,6 +130,8 @@ module Radiant
     export get_incoming_current_density,get_incoming_current,get_total_incoming_current
     export assert_current_closure,boundary_source_from_directional_current
     export Anisotropic_Volume_Source,get_volume_source_rate,get_source_normalization
+    export Energy_Moment_Volume_Source,source_energy_moments,Energy_Source_Projection_Receipt
+    export get_volume_source_energy_MeV
     export Boundary_Projection_Receipt,Volume_Projection_Receipt
     export project_boundary_source,project_volume_source,get_projection_receipts
     export Transport_Balance,get_particle_residual,get_energy_residual,get_charge_residual
@@ -203,6 +205,7 @@ module Radiant
     export Proton_Material_Data,Proton_Nonelastic_Data,Proton_Native_Binding
     export bind_proton_native,proton_transport_preflight,proton_binding_receipt
     export proton_cutoff_handoff,proton_energy_accounting,proton_energy_accounting_report
+    export proton_discrete_energy_balance
 
     export Cylindrical_Shell_Path_Result,cylindrical_shell_critical_cosine
     export cylindrical_shell_path,pure_absorption_fraction
