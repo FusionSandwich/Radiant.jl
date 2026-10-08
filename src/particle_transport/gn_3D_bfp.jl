@@ -104,7 +104,7 @@ for ix in range(1,Nmx), jx in range(1,Nmx), iy in range(1,Nmy), jy in range(1,Nm
         # CSD term
         if ip == jp && ix == jx && iy == jy && iz == jz
             for kE in range(1,iE-1), wE in range(1,NmE)
-                𝒮[i,j] += C[iE] * C[jE] * C[kE] * C[wE] * (1-(-1)^(iE-kE)) * S[wE] * 𝒲[jE,kE,wE]
+                𝒮[i,j] += C[iE] * C[jE] * C[kE]^2 * C[wE] * (1-(-1)^(iE-kE)) * S[wE] * 𝒲[jE,kE,wE]
             end
             𝒮[i,j] += C[iE] * S⁺ * (-1)^(iE-1) * C[jE] * (-1)^(jE-1) * ωE[jE+1]
         end
@@ -258,7 +258,7 @@ for ix in range(1,Nmx), jx in range(1,Nmx), iy in range(1,Nmy), jy in range(1,Nm
         # CSD term
         if ip == jp && ix == jx && iy == jy && iz == jz
             for kE in range(1,iE-1), wE in range(1,NmE)
-                𝒮[i,j] += C[iE] * C[jE] * C[kE] * C[wE] * (1-(-1)^(iE-kE)) * S[wE] * 𝒲[jE,kE,wE]
+                𝒮[i,j] += C[iE] * C[jE] * C[kE]^2 * C[wE] * (1-(-1)^(iE-kE)) * S[wE] * 𝒲[jE,kE,wE]
             end
             𝒮[i,j] += C[iE] * S⁺ * (-1)^(iE-1) * C[jE] * (-1)^(jE-1) * ωE[jE+1]
         end

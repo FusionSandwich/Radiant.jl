@@ -47,14 +47,19 @@ Builds a cache of heavy-particle inelastic-collision constants.
 - `cache::HeavyInelasticCache` : reusable constants for cross-section and feed integrations.
 """
 function HeavyInelasticCache(Zi::Real, Ei::Float64, particle::Particle)
+    (is_proton(particle) || is_alpha(particle)) ||
+        throw(ArgumentError("The native heavy collision kernel supports only Proton and Alpha."))
     mₑ = 0.51099895069
     rₑ = 2.81794092e-13
     Zc = get_charge(particle)
     ratio_mass = get_mass(particle)/mₑ
-    γ = (Ei + ratio_mass)/ratio_mass
-    β² = (γ^2-1)/γ^2
+    all(isfinite, (Zi, Ei, Zc, ratio_mass)) && Zi >= 0 && Ei > 0 && ratio_mass > 0 && Zc != 0 ||
+        throw(ArgumentError("Heavy collision cache requires finite Zi >= 0, Ei > 0, mass > 0 and nonzero charge."))
+    tau = Ei / ratio_mass
+    γ = 1.0 + tau
+    β² = tau * (tau + 2.0) / γ^2
     R = 1/(1+(1/ratio_mass)^2+2*γ/ratio_mass)
-    W_ridge = 2*β²*γ^2*R
+    W_ridge = 2*tau*(tau + 2.0)*R
     A = 2*π*rₑ^2/β² * Zc^2 * Zi
     mu_lin = 1.0 / (Ei * (Ei + 2.0 * ratio_mass))
     return HeavyInelasticCache(Float64(Zi), Ei, mₑ, rₑ, Zc, ratio_mass, γ, β², R, W_ridge, A, mu_lin)
@@ -81,28 +86,9 @@ Gives the inelastic differential cross-sections with atomic electrons for heavy 
 
 """
 function inelastic_collision_heavy_particle(Zi::Real,Ei::Float64,W::Float64,particle::Particle)
-
-    #----
-    # Initialization
-    #----
-    mₑ = 0.51099895069
-    rₑ = 2.81794092e-13 # (in cm)
-    Zc = get_charge(particle)
-    ratio_mass = get_mass(particle)/mₑ
-    γ = (Ei + ratio_mass)/ratio_mass
-    β² = (γ^2-1)/γ^2
-    R = 1/(1+(1/ratio_mass)^2+2*γ/ratio_mass)
-    W_ridge = 2*β²*γ^2*R
-
-    #----
-    # Cross-section
-    #----
-    σs = 0.0
-    if W_ridge > W
-        σs = 2*π*rₑ^2/β² * Zc^2 * Zi * 1/W^2 * (1 - β²*W/W_ridge + (1-β²)/(2*ratio_mass^2)*W^2)
-    end
-
-    return σs
+    cache = HeavyInelasticCache(Zi, Ei, particle)
+    regular, singular = heavy_sigma_components(cache, W)
+    return regular + singular
 end
 
 """
@@ -120,19 +106,64 @@ Splits the heavy-particle inelastic differential cross-section into its singular
 - `A_over_W2::Float64` : leading singular contribution.
 """
 function heavy_sigma_components(cache::HeavyInelasticCache, W::Float64)
-    if W <= 0
+    isfinite(W) && W > 0.0 || throw(ArgumentError("Heavy collision transfer must be finite and positive."))
+    if W > min(cache.Ei, cache.W_ridge)
         return 0.0, 0.0
     end
-    if W > cache.W_ridge
-        return 0.0, 0.0
-    end
-
-    # Full sigma
-    σ_full = cache.A * (1/W^2) * (1 - cache.β²*W/cache.W_ridge + (1 - cache.β²)/(2*cache.ratio_mass^2)*W^2)
-
     A_over_W2 = cache.A / W^2
-    sigma_reg = σ_full - A_over_W2
+    # This partition is signed; do not clip the negative regular term.
+    sigma_reg = cache.A * (-cache.β²/(cache.W_ridge*W) + (1-cache.β²)/(2*cache.ratio_mass^2))
     return sigma_reg, A_over_W2
+end
+
+"""Validate and clip an ordered transfer interval to the hard-kernel support.
+
+Invalid/negative/reversed bounds are errors. An ordered interval above Wmax is
+empty. Zero lower transfer is divergent for n=0/1 on a nonempty interval and
+must not be replaced by an arbitrary small positive cutoff.
+"""
+function heavy_transfer_interval(cache::HeavyInelasticCache, lo::Float64, hi::Float64, n::Int)
+    n in (0,1,2) || throw(ArgumentError("Heavy collision raw moments support only n=0,1,2."))
+    all(isfinite, (lo,hi)) && 0.0 <= lo <= hi ||
+        throw(ArgumentError("Heavy collision transfer bounds must be finite, nonnegative and ordered."))
+    if lo == 0.0 && hi > 0.0 && n < 2
+        throw(DomainError(lo, "The n=0/1 hard collision moment diverges at zero lower transfer."))
+    end
+    return lo, min(hi, cache.Ei, cache.W_ridge)
+end
+
+function heavy_interval_log(lo::Float64, hi::Float64)
+    ratio = (hi-lo)/lo
+    return isfinite(ratio) ? log1p(ratio) : log(hi)-log(lo)
+end
+
+"""Exact finite hard-kernel raw transfer moment ∫ W^n (dσ/dW) dW.
+
+W is measured in electron rest energies; units are cm²*(m_e*c²)^n.
+n=2 is a raw hard collision moment, not a central moment or soft straggling
+coefficient. No diffusion factor 1/2 is included.
+"""
+function heavy_raw_moment(cache::HeavyInelasticCache, n::Int, lo::Float64, hi::Float64)
+    lo, hi = heavy_transfer_interval(cache,lo,hi,n)
+    hi <= lo && return 0.0
+    delta = hi-lo
+    b = cache.β²/cache.W_ridge
+    c = (1-cache.β²)/(2*cache.ratio_mass^2)
+    if n == 0
+        # delta/(lo*hi) exactly, without the thin-interval delta/hi² shortcut.
+        value = (delta/hi)/lo - b*heavy_interval_log(lo,hi) + c*delta
+    elseif n == 1
+        value = heavy_interval_log(lo,hi) - b*delta + c*delta*(hi+lo)/2
+    else
+        value = delta * (1 - b*(hi+lo)/2 + c*(hi^2+hi*lo+lo^2)/3)
+    end
+    return cache.A*value
+end
+
+function heavy_feed_interval(cache::HeavyInelasticCache, Ef_minus::Float64, Ef_plus::Float64, n::Int)
+    all(isfinite, (Ef_minus,Ef_plus)) && 0.0 <= Ef_plus <= Ef_minus <= cache.Ei ||
+        throw(ArgumentError("Heavy collision outgoing bounds must be finite, ordered and in [0,Ei]."))
+    return heavy_transfer_interval(cache,cache.Ei-Ef_minus,cache.Ei-Ef_plus,n)
 end
 
 """
@@ -152,29 +183,9 @@ The integration bounds are converted with `W = Ei - Ef` and clipped to
 - `σ::Float64` : integral of `A / W^2` over the clipped group.
 """
 function integrate_A_over_W2_per_subshell(cache::HeavyInelasticCache, Ef_minus::Float64, Ef_plus::Float64)
-    # Energy bounds in W = Ei - Ef
-    W_plus = cache.Ei - Ef_plus
-    W_minus = cache.Ei - Ef_minus
-
-    # Clip to (0, W_ridge]
-    W_lo = max(W_minus, 1e-300)
-    W_hi = min(W_plus, cache.W_ridge)
-    if W_hi <= W_lo
-        return 0.0
-    end
-
-    # Numerically stable form: (1/W_lo - 1/W_hi) = (W_hi - W_lo) / (W_lo * W_hi)
-    ΔW_clip = W_hi - W_lo
-    if ΔW_clip <= 0.0
-        return 0.0
-    end
-    denom = W_lo * W_hi
-    # Guard against underflow/overflow by ensuring denom is not subnormal
-    if denom == 0.0
-        # If one bound is effectively zero, return the dominant 1/W_lo term
-        return cache.A * (1.0 / W_lo)
-    end
-    return cache.A * (ΔW_clip / denom)
+    lo,hi = heavy_feed_interval(cache,Ef_minus,Ef_plus,0)
+    hi <= lo && return 0.0
+    return cache.A*((hi-lo)/hi)/lo
 end
 
 """
@@ -217,27 +228,18 @@ group for one subshell and one Legendre order.
 - `σl::Float64` : integral of the leading angular correction over the clipped group.
 """
 function integrate_leading_1overW_per_subshell(cache::HeavyInelasticCache, Ef_minus::Float64, Ef_plus::Float64, l::Int64)
+    l >= 0 || throw(ArgumentError("Legendre order must be nonnegative."))
+    # n=2 permits a zero bound for the identically zero l=0 correction.
+    W_lo,W_hi = heavy_feed_interval(cache,Ef_minus,Ef_plus,l == 0 ? 2 : 1)
     if l == 0
         return 0.0
     end
-
-    W_plus = cache.Ei - Ef_plus
-    W_minus = cache.Ei - Ef_minus
-    W_lo = max(W_minus, 1e-300)
-    W_hi = min(W_plus, cache.W_ridge)
     if W_hi <= W_lo
         return 0.0
     end
 
     coef = heavy_leading_1overW_coeff(cache, l)
-    ΔW = W_hi - W_lo
-    # stable log: log(W_hi/W_lo) = log1p(ΔW/W_lo) when ΔW small
-    if ΔW / W_lo < 1e-6
-        log_ratio = log1p(ΔW / W_lo)
-    else
-        log_ratio = log(W_hi) - log(W_lo)
-    end
-    return coef * log_ratio
+    return coef * heavy_interval_log(W_lo,W_hi)
 end
 
 """
@@ -290,7 +292,7 @@ inelastic collision cross-section for one element.
 # Input Argument(s)
 - `Z::Int64` : atomic number.
 - `Ei::Float64` : incoming particle energy [in m_e*c^2].
-- `n::Int64` : energy-loss moment order, either 0 or 1.
+- `n::Int64` : raw energy-loss moment order, 0, 1 or 2.
 - `particle::Particle` : incoming heavy charged particle.
 - `W⁻min::Float64=0.0` : minimum energy loss W of the incoming particle [in m_e*c^2].
 - `is_subshells::Bool=true` : boolean indicating if bounded subshells are resolved.
@@ -299,6 +301,9 @@ inelastic collision cross-section for one element.
 - `σn::Float64` : analytical moment summed over all subshells.
 """
 function integrate_inelastic_collision_heavy_particle(Z::Int64,Ei::Float64,n::Int64,particle::Particle,W⁻min::Float64=0.0,is_subshells::Bool=true)
+    n in (0,1,2) || throw(ArgumentError("Heavy collision raw moments support only n=0,1,2."))
+    isfinite(W⁻min) && W⁻min >= 0.0 || throw(ArgumentError("Minimum transfer must be finite and nonnegative."))
+    HeavyInelasticCache(1.0,Ei,particle) # validate even if no subshell contributes
     Nshells,Zi,Ui,_,_,_ = electron_subshells(Z,~is_subshells)
     σn = 0
     for δi in range(1,Nshells)
@@ -316,7 +321,7 @@ cross-section for one subshell.
 
 # Input Argument(s)
 - `Ei::Float64` : incoming particle energy [in m_e*c^2].
-- `n::Int64` : energy-loss moment order, either 0 or 1.
+- `n::Int64` : raw energy-loss moment order, 0, 1 or 2.
 - `Ui::Float64` : subshell binding energy [in m_e*c^2].
 - `particle::Particle` : incoming heavy charged particle.
 - `W⁻min::Float64=0.0` : minimum energy loss W of the incoming particle [in m_e*c^2].
@@ -325,46 +330,14 @@ cross-section for one subshell.
 - `σni::Float64` : analytical moment for the subshell.
 """
 function integrate_inelastic_collision_heavy_particle_per_subshell(Ei::Float64,n::Int64,Ui::Float64,particle::Particle,W⁻min::Float64=0.0)
-
-    #----
-    # Initialization
-    #----
-    mₑ = 0.51099895069
-    rₑ = 2.81794092e-13 # (in cm)
-    Zc = get_charge(particle)
-    ratio_mass = get_mass(particle)/mₑ
-    γ = (Ei + ratio_mass)/ratio_mass
-    β² = (γ^2-1)/γ^2
-    R = 1/(1+(1/ratio_mass)^2+2*γ/ratio_mass)
-    W_ridge = 2*β²*γ^2*R
-
-    #----
-    # Cross-section
-    #----
-    σni = 0
-    W⁺ = min(Ei,W_ridge)
-    W⁻ = max(W⁻min,Ui)
-    if W⁺ > W⁻
-        ΔW = W⁺ - W⁻
-        if n == 0
-            if ΔW / W⁺ < 1e-6
-                σni = ΔW/W⁺^2 - (β²/W_ridge)*(ΔW/W⁺ - 0.5*(ΔW/W⁺)^2) + ((1-β²)/(2*ratio_mass^2))*ΔW
-            else
-                σni = ΔW / (W⁺ * W⁻) - (β² / W_ridge) * log1p(ΔW / W⁻) + ((1 - β²)/(2*ratio_mass^2)) * ΔW
-            end
-        elseif n == 1
-            if ΔW / W⁻ < 1e-6
-                log_term = ΔW / W⁻ - 0.5*(ΔW/W⁻)^2
-            else
-                log_term = log1p(ΔW / W⁻)
-            end
-            σni = log_term - (β² / W_ridge) * ΔW + ((1 - β²)/(4 * ratio_mass^2)) * ΔW * (W⁺ + W⁻)
-        else
-            error("Integral is given only for n=0 or n=1.")
-        end
-    end
-    σni *= 2*π*rₑ^2/β² * Zc^2
-    return σni
+    n in (0,1,2) || throw(ArgumentError("Heavy collision raw moments support only n=0,1,2."))
+    all(isfinite, (Ui,W⁻min)) && Ui >= 0.0 && W⁻min >= 0.0 ||
+        throw(ArgumentError("Binding energy and minimum transfer must be finite and nonnegative."))
+    cache = HeavyInelasticCache(1.0,Ei,particle)
+    lower = max(W⁻min,Ui)
+    # A threshold above the maximum has empty support; preserve API semantics.
+    upper = max(lower,min(Ei,cache.W_ridge))
+    return heavy_raw_moment(cache,n,lower,upper)
 end
 
 """
@@ -384,36 +357,9 @@ an outgoing-energy group.
 
 """
 function feed_analytical_heavy_particle(cache::HeavyInelasticCache, Ef⁻::Float64, Ef⁺::Float64)
-    # Compute the scalar analytical integral of σ over the group (l=0 moment)
-    σs = 0.0
-    ΔEf = Ef⁻ - Ef⁺
-
-    # Only integrate if energy transfer is within physical limits
-    if cache.W_ridge <= 0 || ΔEf <= 0
-        return σs
-    end
-
-    # Energy bounds for integration (W = Ei - Ef)
-    W⁺ = cache.Ei - Ef⁺
-    W⁻ = cache.Ei - Ef⁻
-
-    if W⁺ <= W⁻
-        return σs
-    end
-
-    #----
-    # Analytical integration over the energy group for the l=0 moment
-    #----
-    ΔW = W⁺ - W⁻
-
-    if ΔW / W⁺ < 1e-6
-        σs = ΔW/W⁺^2 - (cache.β²/cache.W_ridge)*(ΔW/W⁺ - 0.5*(ΔW/W⁺)^2) + ((1-cache.β²)/(2*cache.ratio_mass^2))*ΔW
-    else
-        σs = ΔW / (W⁺ * W⁻) - (cache.β² / cache.W_ridge) * log1p(ΔW / W⁻) + ((1 - cache.β²)/(2*cache.ratio_mass^2)) * ΔW
-    end
-    σs *= cache.A
-
-    return σs
+    lo,hi = heavy_feed_interval(cache,Ef⁻,Ef⁺,0)
+    hi <= lo && return 0.0
+    return heavy_raw_moment(cache,0,lo,hi)
 end
 
 """
@@ -433,26 +379,7 @@ an outgoing-energy group.
 
 """
 function feed_first_moment_heavy_particle(cache::HeavyInelasticCache, Ef⁻::Float64, Ef⁺::Float64)
-    # Energy bounds for integration (W = Ei - Ef)
-    W⁺ = cache.Ei - Ef⁺
-    W⁻ = cache.Ei - Ef⁻
-
-    if W⁺ <= W⁻
-        return 0.0
-    end
-
-    #----
-    # First moment (n=1): ∫ W * σ(W) dW
-    #----
-    ΔW = W⁺ - W⁻
-
-    if ΔW / W⁻ < 1e-6
-        log_term = ΔW / W⁻ - 0.5*(ΔW/W⁻)^2
-    else
-        log_term = log1p(ΔW / W⁻)
-    end
-    M₁ = log_term - (cache.β² / cache.W_ridge) * ΔW + ((1 - cache.β²)/(4 * cache.ratio_mass^2)) * ΔW * (W⁺ + W⁻)
-    M₁ *= cache.A
-
-    return M₁
+    lo,hi = heavy_feed_interval(cache,Ef⁻,Ef⁺,1)
+    hi <= lo && return 0.0
+    return heavy_raw_moment(cache,1,lo,hi)
 end

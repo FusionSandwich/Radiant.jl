@@ -116,7 +116,7 @@ Structure used to define parameters for production of multigroup elastic-scatter
 cross sections.
 
 # Optional field(s) - with default values
-- `interaction_types::Dict{Tuple{Type,Type},Vector{String}} = Dict((Proton,Proton) => ["S", "P"])` : interaction processes, where `"S"` is scattered-projectile production and `"P"` is recoil production.
+- `interaction_types` : defaults to Proton→Proton S/P, Alpha→Alpha S/P and Alpha→Proton P. `"S"` produces the scattered projectile; `"P"` produces H1 protons or He4 alphas selected by outgoing species.
 - `scattering_model::String = "BFP"` : elastic-scattering transport model.
 - `library::String = "TENDL2023"` : elastic ENDF library name.
 - `data_path::String = "../../data"` : root directory for elastic ENDF data.
@@ -158,7 +158,9 @@ mutable struct Elastic_Scattering <: Interaction
     function Elastic_Scattering()
         this = new()
         this.name = "Elastic_Scattering"
-        this.interaction_types = Dict((Proton,Proton) => ["S","P"])
+        this.interaction_types = Dict((Proton,Proton) => ["S","P"],
+                                      (Alpha,Alpha) => ["S","P"],
+                                      (Alpha,Proton) => ["P"])
         this.incoming_particle = unique([t[1] for t in collect(keys(this.interaction_types))])
         this.interaction_particles = unique([t[2] for t in collect(keys(this.interaction_types))])
         this.is_CSD = true
@@ -255,6 +257,8 @@ To define the interaction types for elastic scattering processes.
 - `interaction_types::Dict{Tuple{DataType,DataType},Vector{String}}` : Dictionary of the interaction processes types, of the form (incident particle,outgoing particle) => associated list of interaction type, which can be:
     - `(Proton,Proton) => ["S"]` : scattering of incident protons
     - `(Proton,Proton) => ["P"]` : production of protons by incident protons on hydrogen (handled by target selection) 
+    - `(Alpha,Alpha) => ["S","P"]` : one scattered alpha and, on He4 only, one recoil alpha per event.
+    - `(Alpha,Proton) => ["P"]` : H1 target recoil protons from incident alphas.
 
 # Output Argument(s)
 N/A
@@ -262,11 +266,48 @@ N/A
 # Examples
 ```jldoctest
 julia> elastic_scattering = Elastic_Scattering()
-julia> elastic_scattering.set_interaction_types( Dict((Electron,Electron) => ["S"]) ) # No knock-on electrons.
+julia> elastic_scattering.set_interaction_types( Dict((Alpha,Alpha) => ["S"], (Alpha,Proton) => ["P"]) )
 ```
 """
 function set_interaction_types(this::Elastic_Scattering,interaction_types)
-    this.interaction_types = interaction_types
+    for ((pin, pout), processes) in interaction_types
+        for process in processes
+            process in ("S", "P") || throw(ArgumentError("Elastic process must be S or P."))
+            if process == "S" && pin != pout
+                throw(ArgumentError("Elastic S preserves the projectile species."))
+            elseif process == "P" && pout ∉ (Proton, Alpha)
+                throw(ArgumentError("Elastic recoil production supports H1 protons and He4 alphas only."))
+            end
+        end
+    end
+    this.interaction_types = Dict{Tuple{Type,Type},Vector{String}}(interaction_types)
+    this.incoming_particle = unique([t[1] for t in keys(this.interaction_types)])
+    this.interaction_particles = unique([t[2] for t in keys(this.interaction_types)])
+end
+
+"""Select target recoils by outgoing species; never relabel a proton as an alpha.
+
+For identical particles the LAW=5 event domain is mu_cm in [0,1]. S produces
+the forward CM member once and P the complementary member once. Inclusive
+same-species production is S+P (two particles per event), while TCS counts one
+event. The symmetry/spin factor in LAW=5 does not supply this multiplicity.
+"""
+function elastic_recoil_matches(particle::Particle, Z::Int, A::Int)
+    return (is_proton(particle) && Z == 1 && A == 1) ||
+           (is_alpha(particle) && Z == 2 && A == 4)
+end
+
+function validate_elastic_output(type::String, incoming::Particle, outgoing::Particle)
+    if type == "S"
+        get_type(incoming) == get_type(outgoing) ||
+            throw(ArgumentError("Elastic S must output the incoming projectile species."))
+    elseif type == "P"
+        (is_proton(outgoing) || is_alpha(outgoing)) ||
+            throw(ArgumentError("Elastic P supports only Proton (H1) or Alpha (He4) recoils."))
+    else
+        throw(ArgumentError("Unknown elastic process $(type)."))
+    end
+    return nothing
 end
 
 """
@@ -512,6 +553,23 @@ energy.
 """
 function get_dcs_cache(this::Elastic_Scattering,ptype::Type,db::ElasticScatteringENDFDB,
                        Z::Int,A::Int,E_in_mev::Float64,source::Union{Nothing,String}=nothing)
+    isfinite(E_in_mev) && E_in_mev > 0.0 ||
+        throw(ArgumentError("Elastic DCS requires finite positive incident energy."))
+    iso = db.isotopes[(Z, A)]
+    if ptype in (Proton, Alpha)
+        iso.Z1 == get_charge(ptype()) && iso.Z2 == Z ||
+            error("Elastic database projectile/target charges are inconsistent with the requested species/isotope.")
+        expected_identical = (ptype == Proton && Z == 1 && A == 1) ||
+                             (ptype == Alpha && Z == 2 && A == 4)
+        iso.identical == expected_identical ||
+            error("Elastic LAW=5 identical-particle flag is inconsistent with projectile and target species.")
+        expected_spin = ptype == Alpha ? 0.0 : 0.5
+        iso.spin_s == expected_spin || error("Elastic LAW=5 projectile spin is inconsistent with $(ptype).")
+        isapprox(iso.m_mev, get_mass(ptype()); rtol=1e-12) ||
+            error("Elastic database projectile mass is inconsistent with incoming $(ptype).")
+        isapprox(iso.M_mev, elastic_target_mass(Z,A); rtol=1e-12) ||
+            error("Elastic database target mass is inconsistent with isotope ($(Z),$(A)).")
+    end
     if !isnothing(source) && lowercase(source) != db.dcs_source
         error("Requested DCS source $(source), but the ENDF database was initialized with dcs_source=$(db.dcs_source).")
     end
@@ -783,36 +841,27 @@ interaction.
 - `isSkip::Bool` : define if the integration is skipped or not.
 
 """
-function bounds(this::Elastic_Scattering,Ef⁻::Float64,Ef⁺::Float64,Ei::Float64,type::String,Ec::Float64,particle::Particle,M_target::Float64)
-    # Relativistic maximum energy loss in lab frame
+function bounds(this::Elastic_Scattering,Ef⁻::Float64,Ef⁺::Float64,Ei::Float64,type::String,Ec::Float64,particle::Particle,M_target::Float64;
+                identical::Bool=(get_mass(particle) == M_target))
+    all(isfinite, (Ef⁻, Ef⁺, Ei, Ec)) && Ei > 0.0 && 0.0 <= Ec <= Ei ||
+        throw(ArgumentError("Elastic energy bounds require Ei > 0 and 0 <= Ec <= Ei, all finite."))
     m_mev = get_mass(particle)
     M_mev = M_target
     E_in_mev = Ei * M_E_C2_MEV
-    rel_tol = 2e-3
-    mu_cm = abs(M_mev - m_mev) / m_mev < rel_tol ? 0.0 : -1.0
-    E1 = E_in_mev + m_mev
-    p1 = sqrt(max(E1^2 - m_mev^2, 0.0))
-    s = m_mev^2 + M_mev^2 + 2.0 * M_mev * E1
-    sqrt_s = sqrt(s)
-    E1_star = (s + m_mev^2 - M_mev^2) / (2.0 * sqrt_s)
-    p_star = sqrt(max(E1_star^2 - m_mev^2, 0.0))
-    beta_cm = p1 / (E1 + M_mev)
-    gamma_cm = 1.0 / sqrt(1.0 - beta_cm^2)
-    E1_prime = gamma_cm * (E1_star + beta_cm * p_star * mu_cm)
-    E_out_mev = max(E1_prime - m_mev, 0.0)
-    Emax = max(E_in_mev - E_out_mev, 0.0) / M_E_C2_MEV
+    mu_min = identical ? 0.0 : -1.0
+    Emax = recoil_energy_relativistic(E_in_mev, mu_min, m_mev, M_mev) / M_E_C2_MEV
     # Scattered heavy particle
     if type == "S"
         Ef⁻ = min(Ef⁻,Ec)
         Ef⁺ = max(Ef⁺,0.0,Ei-Emax)
     # Knock-on nucleus
     elseif type == "P"
-        Ef⁻ = min(Ef⁻,Ei-Emax)
+        Ef⁻ = min(Ef⁻,Emax)
         Ef⁺ = max(Ef⁺,Ei-Ec,0.0)
     else
         error("Unknown type.")
     end
-    if (Ef⁻-Ef⁺ < 0) isSkip = true else isSkip = false end
+    isSkip = Ef⁻ <= Ef⁺
     return Ef⁻,Ef⁺,isSkip
 end
 
@@ -839,40 +888,65 @@ interaction.
 
 """
 function dcs(this::Elastic_Scattering,Z::Int64,A::Int64,L::Int64,Ei::Float64,Ef⁻::Float64,Ef⁺::Float64,type::String,particle::Particle)
+    return first(elastic_group_moments(this,Z,A,L,Ei,Ef⁻,Ef⁺,type,particle))
+end
 
-    #----
-    # Initialization
-    #----
+"""Angular moments and the outgoing kinetic-energy moment over one energy group.
+
+Integrate the same projectile event cosine for S and P. For P the outgoing
+energy is Ei-E_projectile and the outgoing direction is the target direction.
+The energy moment is integrated at the quadrature nodes, rather than replacing
+the group energy by its midpoint. Energies in the returned moment use m_e*c^2.
+"""
+function elastic_group_moments(this::Elastic_Scattering,Z::Int,A::Int,L::Int,Ei::Float64,
+                               Ef⁻::Float64,Ef⁺::Float64,type::String,particle::Particle)
+    type in ("S", "P") || throw(ArgumentError("Unknown elastic process $(type)."))
+    L >= 0 || throw(ArgumentError("Legendre order must be nonnegative."))
+    all(isfinite, (Ei, Ef⁻, Ef⁺)) && Ei > 0.0 ||
+        throw(ArgumentError("Elastic incident energy must be positive and group bounds finite."))
     σl = zeros(L+1)
+    Ef⁻ <= Ef⁺ && return σl, 0.0
     ptype = get_type(particle)
     endf_db = this.get_endf_db()
     db = endf_db[ptype]
 
     m_mev = get_mass(particle)
-    M_mev = get_mass(Z, A)
+    M_mev = elastic_target_mass(Z, A)
     E_in_mev = Ei * M_E_C2_MEV
     cache = this.get_dcs_cache(ptype, db, Z, A, E_in_mev)
 
-    mu_hi = mu_cm_from_Eout_relativistic(E_in_mev, Ef⁻ * M_E_C2_MEV, m_mev, M_mev)
-    mu_lo = mu_cm_from_Eout_relativistic(E_in_mev, Ef⁺ * M_E_C2_MEV, m_mev, M_mev)
+    if type == "S"
+        mu_hi = mu_cm_from_Eout_relativistic(E_in_mev, Ef⁻ * M_E_C2_MEV, m_mev, M_mev)
+        mu_lo = mu_cm_from_Eout_relativistic(E_in_mev, Ef⁺ * M_E_C2_MEV, m_mev, M_mev)
+    else
+        # Target energy decreases with the projectile event cosine.
+        mu_hi = mu_cm_from_Eout_relativistic(E_in_mev, (Ei-Ef⁺) * M_E_C2_MEV, m_mev, M_mev)
+        mu_lo = mu_cm_from_Eout_relativistic(E_in_mev, (Ei-Ef⁻) * M_E_C2_MEV, m_mev, M_mev)
+    end
+    mu_lo = max(mu_lo, cache.identical ? 0.0 : -1.0)
+    mu_hi <= mu_lo && return σl, 0.0
 
     Nq = max(16, L + 1)
     μ_nodes, w = quadrature(Nq, "gauss-legendre")
     Δ = 0.5 * (mu_hi - mu_lo)
     μ_mid = 0.5 * (mu_hi + mu_lo)
 
-    for l in range(0, L)
-        acc = 0.0
-        for k in eachindex(μ_nodes)
-            mu_cm = Δ * μ_nodes[k] + μ_mid
-            mu_lab = mu_lab_from_mu_cm(mu_cm, E_in_mev, m_mev, M_mev)
-            mu_cm_dsig = (type == "P" && is_proton(particle) && Z == 1 && A == 1) ? -mu_cm : mu_cm
-            sigma = elastic_dsig(cache, mu_cm_dsig)
-            acc += w[k] * sigma * legendre_polynomials(l, mu_lab)
+    energy_moment = 0.0
+    for k in eachindex(μ_nodes)
+        mu_cm = Δ * μ_nodes[k] + μ_mid
+        mu_lab = type == "S" ? mu_lab_from_mu_cm(mu_cm, E_in_mev, m_mev, M_mev) :
+                               recoil_mu_lab_from_mu_cm(mu_cm, E_in_mev, m_mev, M_mev)
+        sigma = elastic_dsig(cache, mu_cm)
+        weight = w[k] * sigma
+        for l in 0:L
+            σl[l+1] += weight * legendre_polynomials(l, mu_lab)
         end
-        σl[l+1] = 2.0 * pi * acc * Δ
+        Eout = type == "S" ? scattered_energy_relativistic(E_in_mev, mu_cm, m_mev, M_mev) :
+                             recoil_energy_relativistic(E_in_mev, mu_cm, m_mev, M_mev)
+        energy_moment += weight * Eout / M_E_C2_MEV
     end
-    return σl .* BARN_TO_CM2
+    scale = 2.0 * pi * Δ * BARN_TO_CM2
+    return σl .* scale, energy_moment * scale
 end
 
 """
@@ -898,6 +972,9 @@ Gives the total cross-section for elastic scattering interaction.
 function tcs(this::Elastic_Scattering,Ei::Float64,Ec::Float64,particle::Particle,Z::Int64;
     A::Union{Nothing,Vector{Int64}}=nothing,
     atpercentA::Union{Nothing,Vector{Float64}}=nothing)
+
+    all(isfinite, (Ei, Ec)) && Ei > 0.0 && 0.0 <= Ec <= Ei ||
+        throw(ArgumentError("Elastic TCS requires Ei > 0 and 0 <= Ec <= Ei, all finite."))
 
     if isnothing(A) || isnothing(atpercentA)
         pairs = isotopic_composition(Z)
@@ -964,6 +1041,8 @@ Gives the stopping power for elastic scattering interaction.
 
 """
 function sp(this::Elastic_Scattering,Z::Vector{Int64},atz::Vector{Float64},N_density::Float64,Ei::Float64,Ec::Float64,particle::Particle,A::Vector{Vector{Int64}},atpercentA::Vector{Vector{Float64}})
+    all(isfinite, (Ei, Ec)) && Ei > 0.0 && 0.0 <= Ec <= Ei ||
+        throw(ArgumentError("Elastic stopping requires Ei > 0 and 0 <= Ec <= Ei, all finite."))
     ptype = get_type(particle)
     endf_db = this.get_endf_db()
     db = endf_db[ptype]
@@ -978,7 +1057,7 @@ function sp(this::Elastic_Scattering,Z::Vector{Int64},atz::Vector{Float64},N_den
         S_elem = 0.0
         for (Ai, atai) in zip(A[i], atpercentA[i])
             iso = db.isotopes[(Zi, Ai)]
-            M_mev = get_mass(Zi, Ai)
+            M_mev = elastic_target_mass(Zi, Ai)
             cache = this.get_dcs_cache(ptype, db, Zi, Ai, E_in_mev)
             mu_b = mu_cm_from_Eout_relativistic(E_in_mev, Ec_mev, m_mev, M_mev)
             mu_lo = iso.identical ? 0.0 : -1.0
@@ -1033,6 +1112,9 @@ Gives the momentum transfer for elastic scattering interaction.
 """
 function mt(this::Elastic_Scattering,Z::Int64,Ei::Float64,Ec::Float64,particle::Particle,A::Vector{Int64},atpercentA::Vector{Float64})
 
+    all(isfinite, (Ei, Ec)) && Ei > 0.0 && 0.0 <= Ec <= Ei ||
+        throw(ArgumentError("Elastic momentum transfer requires Ei > 0 and 0 <= Ec <= Ei, all finite."))
+
     ptype = get_type(particle)
     endf_db = this.get_endf_db()
     db = endf_db[ptype]
@@ -1044,7 +1126,7 @@ function mt(this::Elastic_Scattering,Z::Int64,Ei::Float64,Ec::Float64,particle::
     T = 0.0
     for (Ai, atai) in zip(A, atpercentA)
         iso = db.isotopes[(Z, Ai)]
-        M_mev = get_mass(Z, Ai)
+        M_mev = elastic_target_mass(Z, Ai)
         cache = this.get_dcs_cache(ptype, db, Z, Ai, E_in_mev)
         mu_b = mu_cm_from_Eout_relativistic(E_in_mev, E_out_mev, m_mev, M_mev)
         mu_lo = iso.identical ? 0.0 : -1.0

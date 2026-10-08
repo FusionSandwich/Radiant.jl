@@ -4,6 +4,19 @@ const HBAR_eVs = 6.582119569e-16
 const C_m_per_s = 299_792_458.0
 const ALPHA_FS = 1.0 / 137.035999177
 
+"""Reject unqualified alpha extrapolation beyond the supplied ENDF energy grid."""
+function validate_elastic_energy_coverage(iso::IsotopeElasticDB, energies, E::Float64)
+    isempty(energies) && error("Elastic DCS has no incident-energy data.")
+    all(x -> isfinite(x) && x > 0.0, energies) ||
+        error("Elastic DCS incident-energy grid must be finite and positive.")
+    if iso.Z1 == 2
+        slack = 8*eps(max(abs(E), maximum(energies)))
+        minimum(energies)-slack <= E <= maximum(energies)+slack ||
+            error("Alpha elastic incident energy is outside the supplied ENDF coverage; extrapolation is unqualified.")
+    end
+    return nothing
+end
+
 """
     prepare_elastic_dsig_cache(db::ElasticScatteringENDFDB, Z::Int, A::Int,
     E_in_MeV::Float64)
@@ -34,6 +47,8 @@ one incident energy.
 - ENDF-6 Formats Manual, MF=6, LAW=5 charged-particle elastic scattering.
 """
 function prepare_elastic_dsig_cache(db::ElasticScatteringENDFDB, Z::Int, A::Int, E_in_MeV::Float64)
+    isfinite(E_in_MeV) && E_in_MeV > 0.0 ||
+        throw(ArgumentError("Elastic DCS requires finite positive incident energy."))
     iso = db.isotopes[(Z, A)]
     E_eV = E_in_MeV * 1.0e6
     source = db.dcs_source
@@ -50,6 +65,7 @@ function prepare_elastic_dsig_cache(db::ElasticScatteringENDFDB, Z::Int, A::Int,
     if source == "database"
         isempty(iso.energies) && error("No tabulated elastic DCS was stored for isotope (Z=$(Z), A=$(A)). Reinitialize with dcs_source=\"database\".")
         isempty(iso.dcs) && error("No tabulated elastic DCS was stored for isotope (Z=$(Z), A=$(A)). Reinitialize with dcs_source=\"database\".")
+        validate_elastic_energy_coverage(iso, iso.energies, E_in_MeV)
 
         function mu_grid_for_energy(Ei::Float64)
             if iso.ltp > 2 && (iso.mupni_tables isa Dict{Float64,Tuple{Vector{Float64},Vector{Float64}}})
@@ -107,6 +123,7 @@ function prepare_elastic_dsig_cache(db::ElasticScatteringENDFDB, Z::Int, A::Int,
             coeffs = iso.ba_tables_ltp1
             coeffs === nothing && error("Missing LTP=1 coefficient tables for coefficient-based DCS.")
             energies = sort(collect(keys(coeffs)))
+            validate_elastic_energy_coverage(iso, energies, E_eV)
 
             local NL
             local b
@@ -147,6 +164,7 @@ function prepare_elastic_dsig_cache(db::ElasticScatteringENDFDB, Z::Int, A::Int,
             coeffs = iso.c_tables_ltp2
             coeffs === nothing && error("Missing LTP=2 coefficient tables for coefficient-based DCS.")
             energies = sort(collect(keys(coeffs)))
+            validate_elastic_energy_coverage(iso, energies, E_eV)
 
             local NL
             local c
@@ -182,6 +200,8 @@ function prepare_elastic_dsig_cache(db::ElasticScatteringENDFDB, Z::Int, A::Int,
             end
 
             energies = sort(collect(keys(tables)))
+            validate_elastic_energy_coverage(iso, energies, E_eV)
+            validate_elastic_energy_coverage(iso, iso.sigmaNI_E, E_eV)
             local mu_tab
             local pni_tab
             if length(energies) == 1 || E_eV <= energies[1]
@@ -1041,9 +1061,17 @@ function load_elastic_scattering_endf(endf_path::String, Z::Int, A::Int,
     spin_s = Float64(eladata.SPI)
     m_MeV = get_mass(particle)
     m_eV = m_MeV * 1.0e6
-    M_MeV = get_mass(Z, A)
+    M_MeV = elastic_target_mass(Z, A)
     M_eV = M_MeV * 1.0e6
     identical = (eladata.LIDP == 1)
+    if is_alpha(particle) || is_proton(particle)
+        expected_identical = (is_alpha(particle) && Z == 2 && A == 4) ||
+                             (is_proton(particle) && Z == 1 && A == 1)
+        identical == expected_identical ||
+            error("LAW=5 LIDP disagrees with the native projectile/target identity in $(endf_path).")
+        spin_s == (is_alpha(particle) ? 0.0 : 0.5) ||
+            error("LAW=5 SPI disagrees with the native projectile spin in $(endf_path).")
+    end
 
     """
         simple_forward_mu_grid(mu_min, mu_max; n_coarse=50, n_dense=100, x_min=1e-8)

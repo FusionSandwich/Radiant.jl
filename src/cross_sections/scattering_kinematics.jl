@@ -47,25 +47,49 @@ Used as the forward map for mu inversion in
 """
 function scattered_energy_relativistic(E_in_mev::Float64, mu::Float64,
                                        m_mev::Float64, M_mev::Float64)::Float64
+    return max(E_in_mev - recoil_energy_relativistic(E_in_mev, mu, m_mev, M_mev), 0.0)
+end
 
-    E1 = E_in_mev + m_mev
-    p1 = sqrt(max(E1^2 - m_mev^2, 0.0))
-    s = m_mev^2 + M_mev^2 + 2.0 * M_mev * E1
-    sqrt_s = sqrt(s)
+"""Energy-transfer slope K: the target recoil energy is K*(1-mu_cm).
 
-    E1_star = (s + m_mev^2 - M_mev^2) / (2.0 * sqrt_s)
-    p_star = sqrt(max(E1_star^2 - m_mev^2, 0.0))
+This form follows from the Lorentz boost of the two outgoing CM momenta and
+avoids subtracting nearly equal rest energies at small incident energy.
+"""
+function elastic_transfer_slope(E::Float64, m::Float64, M::Float64)
+    all(isfinite, (E, m, M)) && E > 0.0 && m > 0.0 && M > 0.0 ||
+        throw(ArgumentError("Elastic kinematics require finite positive incident energy and masses."))
+    return M * E * (E + 2.0*m) / ((m + M)^2 + 2.0*M*E)
+end
 
-    beta_cm = p1 / (E1 + M_mev)
-    gamma_cm = 1.0 / sqrt(1.0 - beta_cm^2)
+function recoil_energy_relativistic(E::Float64, mu::Float64, m::Float64, M::Float64)
+    isfinite(mu) && -1.0 <= mu <= 1.0 || throw(ArgumentError("CM cosine must be in [-1,1]."))
+    return elastic_transfer_slope(E, m, M) * (1.0 - mu)
+end
 
-    E1_prime = gamma_cm * (E1_star + beta_cm * p_star * mu)
-    return max(E1_prime - m_mev, 0.0)
+"""Lab cosine of the outgoing target, expressed in the projectile event CM cosine.
+
+The target CM momentum is opposite the projectile CM momentum. Its longitudinal
+lab momentum is gamma_cm*p_star*(1-mu), with transverse magnitude
+p_star*sqrt(1-mu^2). At zero recoil use the limiting cosine, zero.
+"""
+function recoil_mu_lab_from_mu_cm(mu::Float64, E::Float64, m::Float64, M::Float64)
+    recoil_energy_relativistic(E, mu, m, M) # validate inputs
+    gamma_cm = (E + m + M) / sqrt((m + M)^2 + 2.0*M*E)
+    return gamma_cm * sqrt((1.0 - mu) / (1.0 + mu + gamma_cm^2 * (1.0 - mu)))
+end
+
+"""Use native nuclear masses for transported H1 and He4 recoils.
+
+Other isotopes retain the existing neutral atomic mass approximation.
+"""
+function elastic_target_mass(Z::Int, A::Int)
+    Z == 1 && A == 1 && return Float64(get_mass(Proton()))
+    Z == 2 && A == 4 && return Float64(get_mass(Alpha()))
+    return get_mass(Z, A)
 end
 
 """
-Invert mu_cm from scattered energy using bisection on [mu_lo, 1].
-Assumes scattered energy is monotonic in mu_cm.
+Invert the affine scattered-energy map and clamp to the physical domain [-1,1].
 
 Used to convert Ef bounds into mu_cm bounds for elastic scattering
 integration.
@@ -73,32 +97,9 @@ integration.
 function mu_cm_from_Eout_relativistic(E_in_mev::Float64, E_out_mev::Float64,
                                       m_mev::Float64, M_mev::Float64)
 
-    energy_at_mu(mu_val::Float64) = scattered_energy_relativistic(E_in_mev, mu_val, m_mev, M_mev)
-    E_lo = energy_at_mu(-1.0)
-    E_hi = energy_at_mu(1.0)
-
-    target = E_out_mev
-    if target <= E_lo
-        return -1.0
-    elseif target >= E_hi
-        return 1.0
-    end
-
-    lo = -1.0
-    hi = 1.0
-    for _ in 1:80
-        mid = 0.5 * (lo + hi)
-        E_mid = energy_at_mu(mid)
-        if abs(E_mid - target) <= 1.0e-12 || (hi - lo) < 1.0e-12
-            return mid
-        end
-        if E_mid < target
-            lo = mid
-        else
-            hi = mid
-        end
-    end
-    return 0.5 * (lo + hi)
+    isfinite(E_out_mev) || throw(ArgumentError("Outgoing energy must be finite."))
+    K = elastic_transfer_slope(E_in_mev, m_mev, M_mev)
+    return clamp(1.0 - (E_in_mev - E_out_mev) / K, -1.0, 1.0)
 end
 
 """
@@ -106,12 +107,13 @@ Lab-frame mu (cos(theta_lab)) from CM mu for elastic scattering of projectile.
 """
 function mu_lab_from_mu_cm(mu_cm::Float64, E_in_mev::Float64,
                            m_mev::Float64, M_mev::Float64)
+    recoil_energy_relativistic(E_in_mev, mu_cm, m_mev, M_mev) # validate inputs
     E1 = E_in_mev + m_mev
-    p1 = sqrt(max(E1^2 - m_mev^2, 0.0))
-    s = m_mev^2 + M_mev^2 + 2.0 * M_mev * E1
+    p1 = sqrt(E_in_mev * (E_in_mev + 2.0*m_mev))
+    s = (m_mev + M_mev)^2 + 2.0 * M_mev * E_in_mev
     sqrt_s = sqrt(s)
     E1_star = (s + m_mev^2 - M_mev^2) / (2.0 * sqrt_s)
-    p_star = sqrt(max(E1_star^2 - m_mev^2, 0.0))
+    p_star = M_mev * p1 / sqrt_s
     beta_cm = p1 / (E1 + M_mev)
     gamma_cm = 1.0 / sqrt(1.0 - beta_cm^2)
 

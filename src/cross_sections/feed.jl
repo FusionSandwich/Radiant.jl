@@ -165,6 +165,10 @@ fractions when isotope-resolved data are provided.
 """
 function feed_elastic_scattering(Z::Vector{Int64},atz::Vector{Float64},L::Int64,Ei::Float64,Eout::Vector{Float64},Ng::Int64,interaction::Interaction,gi::Int64,Ngi::Int64,particles::Vector{Particle},type::String,incoming_particle::Particle,scattered_particle::Particle,Ein::Vector{Float64},Ec::Float64,is_elastic::Bool,is_subshells::Bool,A::Vector{Vector{Int64}},atpercentA::Vector{Vector{Float64}})
 
+validate_elastic_output(type, incoming_particle, scattered_particle)
+all(isfinite, (Ei, Ec)) && Ei > 0.0 && 0.0 <= Ec <= Ei ||
+    throw(ArgumentError("Elastic feed requires Ei > 0 and 0 <= Ec <= Ei, all finite."))
+
 #----
 # Initialization
 #----
@@ -180,9 +184,11 @@ Nz = length(Z)
 for i in range(1,Nz)
     # Loop over isotopes
     for (Ai, atai) in zip(A[i], atpercentA[i])
-        if type == "P" && !(Z[i] == 1 && Ai == 1)
+        if type == "P" && !elastic_recoil_matches(scattered_particle, Z[i], Ai)
             continue
         end
+        db = interaction.get_endf_db()[get_type(incoming_particle)]
+        cache = interaction.get_dcs_cache(get_type(incoming_particle), db, Z[i], Ai, Ei*M_E_C2_MEV)
         δi = 0
         Ui = 0.0
         Zi = Z[i]
@@ -192,18 +198,19 @@ for i in range(1,Nz)
 
             # Final energy group
             Ef⁻ = Eout[gf]; Ef⁺ = Eout[gf+1]
-            M_target = get_mass(Z[i], Ai)
-            Ef⁻,Ef⁺,isSkip = bounds_dispatch(interaction,Ef⁻,Ef⁺,Ei,gi,gf,type,Ui,Ec,incoming_particle,M_target)
+            M_target = elastic_target_mass(Z[i], Ai)
+            Ef⁻,Ef⁺,isSkip = bounds(interaction,Ef⁻,Ef⁺,Ei,type,Ec,incoming_particle,M_target;
+                                  identical=cache.identical)
             if isSkip continue end
             ΔEf = Ef⁻ - Ef⁺
 
             # Integration over the energy group
             𝓕i = zeros(L+1)
             𝓕iₑ = 0
-            Ef = is_elastic ? Ei : (Ef⁻ + Ef⁺) / 2
-            Σsᵢ = dcs_dispatch(interaction,L,Ei,Ef,Z[i],scattered_particle,type,i,particles,Ein,Ef⁻,Ef⁺,δi,Ui,Zi,Ti,ri,Ec,incoming_particle,Ai) * atz[i] * atai
+            Σsᵢ, energy_moment = elastic_group_moments(interaction,Z[i],Ai,L,Ei,Ef⁻,Ef⁺,type,incoming_particle)
+            Σsᵢ *= atz[i] * atai
             𝓕i .+= Σsᵢ
-            𝓕iₑ += Σsᵢ[1] * Ef
+            𝓕iₑ += energy_moment * atz[i] * atai
             𝓕[gf,:] .+= 𝓕i
             𝓕ₑ[gf] += 𝓕iₑ
         end
