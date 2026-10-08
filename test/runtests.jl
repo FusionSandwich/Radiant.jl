@@ -10,6 +10,7 @@ import Radiant
     include("csd_kernel_normalization.jl")
     include("gn_csd_kernel_normalization.jl")
     include("geometry_origins.jl")
+    include("csd_energy_scoring.jl")
 
 end
 nothing
