@@ -761,10 +761,10 @@ function bounds(this::Inelastic_Collision,Ef⁻::Float64,Ef⁺::Float64,Ei::Floa
     elseif is_proton(particle) || is_alpha(particle)
         mₑ = 0.51099895069
         ratio_mass = get_mass(particle)/mₑ
-        γ = (Ei + ratio_mass)/ratio_mass
-        β² = (γ^2-1)/γ^2
+        t = Ei / ratio_mass
+        γ = 1 + t
         R = 1/(1+(1/ratio_mass)^2+2*γ/ratio_mass)
-        W_ridge = 2*β²*γ^2*R
+        W_ridge = 2 * t * (2 + t) * R
         # Scattered heavy particle
         if type == "S"
             Ef⁻ = min(Ef⁻,Ec,Ei-Ui)
