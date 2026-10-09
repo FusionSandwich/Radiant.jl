@@ -51,10 +51,11 @@ function HeavyInelasticCache(Zi::Real, Ei::Float64, particle::Particle)
     rₑ = 2.81794092e-13
     Zc = get_charge(particle)
     ratio_mass = get_mass(particle)/mₑ
-    γ = (Ei + ratio_mass)/ratio_mass
-    β² = (γ^2-1)/γ^2
+    t = Ei / ratio_mass
+    γ = 1 + t
+    β² = t * (2 + t) / γ^2
     R = 1/(1+(1/ratio_mass)^2+2*γ/ratio_mass)
-    W_ridge = 2*β²*γ^2*R
+    W_ridge = 2 * t * (2 + t) * R
     A = 2*π*rₑ^2/β² * Zc^2 * Zi
     mu_lin = 1.0 / (Ei * (Ei + 2.0 * ratio_mass))
     return HeavyInelasticCache(Float64(Zi), Ei, mₑ, rₑ, Zc, ratio_mass, γ, β², R, W_ridge, A, mu_lin)
@@ -89,10 +90,11 @@ function inelastic_collision_heavy_particle(Zi::Real,Ei::Float64,W::Float64,part
     rₑ = 2.81794092e-13 # (in cm)
     Zc = get_charge(particle)
     ratio_mass = get_mass(particle)/mₑ
-    γ = (Ei + ratio_mass)/ratio_mass
-    β² = (γ^2-1)/γ^2
+    t = Ei / ratio_mass
+    γ = 1 + t
+    β² = t * (2 + t) / γ^2
     R = 1/(1+(1/ratio_mass)^2+2*γ/ratio_mass)
-    W_ridge = 2*β²*γ^2*R
+    W_ridge = 2 * t * (2 + t) * R
 
     #----
     # Cross-section
@@ -333,10 +335,11 @@ function integrate_inelastic_collision_heavy_particle_per_subshell(Ei::Float64,n
     rₑ = 2.81794092e-13 # (in cm)
     Zc = get_charge(particle)
     ratio_mass = get_mass(particle)/mₑ
-    γ = (Ei + ratio_mass)/ratio_mass
-    β² = (γ^2-1)/γ^2
+    t = Ei / ratio_mass
+    γ = 1 + t
+    β² = t * (2 + t) / γ^2
     R = 1/(1+(1/ratio_mass)^2+2*γ/ratio_mass)
-    W_ridge = 2*β²*γ^2*R
+    W_ridge = 2 * t * (2 + t) * R
 
     #----
     # Cross-section
@@ -347,17 +350,9 @@ function integrate_inelastic_collision_heavy_particle_per_subshell(Ei::Float64,n
     if W⁺ > W⁻
         ΔW = W⁺ - W⁻
         if n == 0
-            if ΔW / W⁺ < 1e-6
-                σni = ΔW/W⁺^2 - (β²/W_ridge)*(ΔW/W⁺ - 0.5*(ΔW/W⁺)^2) + ((1-β²)/(2*ratio_mass^2))*ΔW
-            else
-                σni = ΔW / (W⁺ * W⁻) - (β² / W_ridge) * log1p(ΔW / W⁻) + ((1 - β²)/(2*ratio_mass^2)) * ΔW
-            end
+            σni = ΔW / (W⁺ * W⁻) - (β² / W_ridge) * log1p(ΔW / W⁻) + ((1 - β²)/(2*ratio_mass^2)) * ΔW
         elseif n == 1
-            if ΔW / W⁻ < 1e-6
-                log_term = ΔW / W⁻ - 0.5*(ΔW/W⁻)^2
-            else
-                log_term = log1p(ΔW / W⁻)
-            end
+            log_term = log1p(ΔW / W⁻)
             σni = log_term - (β² / W_ridge) * ΔW + ((1 - β²)/(4 * ratio_mass^2)) * ΔW * (W⁺ + W⁻)
         else
             error("Integral is given only for n=0 or n=1.")
@@ -406,11 +401,7 @@ function feed_analytical_heavy_particle(cache::HeavyInelasticCache, Ef⁻::Float
     #----
     ΔW = W⁺ - W⁻
 
-    if ΔW / W⁺ < 1e-6
-        σs = ΔW/W⁺^2 - (cache.β²/cache.W_ridge)*(ΔW/W⁺ - 0.5*(ΔW/W⁺)^2) + ((1-cache.β²)/(2*cache.ratio_mass^2))*ΔW
-    else
-        σs = ΔW / (W⁺ * W⁻) - (cache.β² / cache.W_ridge) * log1p(ΔW / W⁻) + ((1 - cache.β²)/(2*cache.ratio_mass^2)) * ΔW
-    end
+    σs = ΔW / (W⁺ * W⁻) - (cache.β² / cache.W_ridge) * log1p(ΔW / W⁻) + ((1 - cache.β²)/(2*cache.ratio_mass^2)) * ΔW
     σs *= cache.A
 
     return σs
@@ -446,11 +437,7 @@ function feed_first_moment_heavy_particle(cache::HeavyInelasticCache, Ef⁻::Flo
     #----
     ΔW = W⁺ - W⁻
 
-    if ΔW / W⁻ < 1e-6
-        log_term = ΔW / W⁻ - 0.5*(ΔW/W⁻)^2
-    else
-        log_term = log1p(ΔW / W⁻)
-    end
+    log_term = log1p(ΔW / W⁻)
     M₁ = log_term - (cache.β² / cache.W_ridge) * ΔW + ((1 - cache.β²)/(4 * cache.ratio_mass^2)) * ΔW * (W⁺ + W⁻)
     M₁ *= cache.A
 
