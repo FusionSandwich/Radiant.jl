@@ -110,11 +110,20 @@ function validate_production_mts(mts::Vector{Int})
     return nothing
 end
 
+# Nuclear nonelastic INT6 needs a reaction threshold which the author path does
+# not retain. Reject it here without changing shared elastic/parser capability.
+function validate_nuclear_mf3_map(E, NBT, INT, source::AbstractString)
+    !isempty(NBT) && !isempty(INT) || error("$source: missing nuclear MF3 interpolation map.")
+    validate_interp_metadata(NBT,INT,length(E),"$source nuclear MF3";supported_ints=1:5)
+    return nothing
+end
+
 function sum_mf3_partials(lines::Vector{String}, mts::Vector{Int}, source::AbstractString)
     channels = [read_mf3_mt(lines, mt; source=source) for mt in mts]
 
     E = Float64[]
     for (_ZA, _AWR, Ec, _Sc, _NBTc, _INTc) in channels
+        validate_nuclear_mf3_map(Ec,_NBTc,_INTc,source)
         append!(E, Ec)
     end
     sort!(E)
@@ -178,6 +187,7 @@ function mf3_nonelastic_table(lines::Vector{String}, mt::Int, source::AbstractSt
 
     if !isnothing(find_section_start(lines, 3, mt; start_i=i_mf3))
         (_ZA, _AWR, E, S, NBT, INT) = read_mf3_mt(lines, mt; source=source)
+        validate_nuclear_mf3_map(E,NBT,INT,source)
         return (E, S, NBT, INT)
     end
 
@@ -194,6 +204,7 @@ function mf3_nonelastic_table(lines::Vector{String}, mt::Int, source::AbstractSt
     if length(mts) == 1
         # A single channel is kept with its own grid and interpolation law.
         (_ZA, _AWR, E, S, NBT, INT) = read_mf3_mt(lines, mts[1]; source=source)
+        validate_nuclear_mf3_map(E,NBT,INT,source)
         return (E, S, NBT, INT)
     end
     (E, S) = sum_mf3_partials(lines, mts, source)
@@ -365,6 +376,7 @@ function nuclear_production_endf(db_name::String, isotopes::Vector{Tuple{Int,Int
 
             # Read MF=3 total XS for this channel
             (_, _, E_xs, S_xs, NBT_xs, INT_xs) = read_mf3_mt(lines, mt)
+            validate_nuclear_mf3_map(E_xs,NBT_xs,INT_xs,"$endf_path MT=$mt")
 
             # Read product subsections
             products = read_mf6_mt(lines, mt; source=endf_path)

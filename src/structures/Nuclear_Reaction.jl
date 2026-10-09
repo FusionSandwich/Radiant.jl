@@ -216,6 +216,8 @@ julia> nr.set_interaction_types( Dict((Proton,Proton) => ["A","P"]) )     # + pr
 ```
 """
 function set_interaction_types(this::Nuclear_Reaction,interaction_types)
+    all(v -> length(unique(v)) == length(v),values(interaction_types)) ||
+        error("Duplicate nuclear interaction process strings are unsupported.")
     all(kv -> all(t -> t in ("A","P"),kv.second),interaction_types) || error("Unsupported nuclear interaction type.")
     all(kv -> !("A" in kv.second) || kv.first[1] == kv.first[2],interaction_types) ||
         error("Nuclear absorption requires same-species input/output pairs.")
@@ -426,6 +428,8 @@ N/A
 function initialize(this::Nuclear_Reaction, particles, isotopes::Vector{Tuple{Int,Int}};
     energy_boundaries::Union{Nothing,Vector{Vector{Float64}}}=nothing)
     endf_db = this.get_endf_db()
+    all(v -> length(unique(v)) == length(v),values(this.interaction_types)) ||
+        error("Duplicate nuclear interaction process strings are unsupported.")
     all(kv -> !("A" in kv.second) || kv.first[1] == kv.first[2],this.interaction_types) ||
         error("Nuclear absorption requires same-species input/output pairs.")
     validate_production_mts(this.production_mts)
