@@ -36,7 +36,7 @@ equation.
 N/A
 
 """
-function flux_1D_BFP(μ::Float64,Σt::Float64,Δx::Float64,Qn::Vector{Float64},𝚽x12::Vector{Float64},S⁻::Float64,S⁺::Float64,S::Vector{Float64},ΔE::Float64,𝚽E12::Vector{Float64},𝒪E::Int64,𝒪x::Int64,C::Vector{Float64},ωE::Array{Float64},ωx::Array{Float64},isAdapt::Bool,𝒲::Array{Float64},isFC::Bool)
+function flux_1D_BFP(μ::Float64,Σt::Float64,Δx::Float64,Qn::Vector{Float64},𝚽x12::Vector{Float64},S⁻::Float64,S⁺::Float64,S::Vector{Float64},ΔE::Float64,𝚽E12::Vector{Float64},𝒪E::Int64,𝒪x::Int64,C::Vector{Float64},ωE::Array{Float64},ωx::Array{Float64},isAdapt::Bool,𝒲::Array{Float64},𝒲₂::Array{Float64},Tstr⁻::Float64,Tstr⁺::Float64,Tstr::Vector{Float64},isFC::Bool)
     
 # Initialization
 sx = sign(μ)
@@ -80,6 +80,13 @@ for ix in range(1,𝒪x), jx in range(1,𝒪x), iE in range(1,𝒪E), jE in rang
         end
     end
     𝒮[i,j] += C[iE] * S⁺ * (-1)^(iE-1) * C[jE] * (-1)^(jE-1) * ωE[jE+1,jx,ix]
+
+    # Straggling term (second moment, heavy particles only)
+    if ix == jx
+        for wE in range(1,𝒪E)
+            𝒮[i,j] += C[iE] * C[jE] * C[wE] * Tstr[wE] * 𝒲₂[iE,jE,wE]
+        end
+    end
 
 end
 

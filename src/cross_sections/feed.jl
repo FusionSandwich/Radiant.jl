@@ -211,3 +211,125 @@ for i in range(1,Nz)
 end
 return 𝓕, 𝓕ₑ
 end
+
+"""
+    feed_nuclear_reaction(Z::Vector{Int64}, atz::Vector{Float64},
+    ωz::Vector{Float64}, ρ::Float64, N_density::Float64, state_of_matter::String,
+    L::Int64, Ei::Float64, Eout::Vector{Float64}, Ng::Int64,
+    interaction::Nuclear_Reaction, gi::Int64, Ngi::Int64,
+    particles::Vector{Particle}, type::String,
+    incoming_particle::Particle, Ein::Vector{Float64},
+    I_eff::Float64,
+    A::Vector{Vector{Int64}},
+    atpercentA::Vector{Vector{Float64}})
+
+Calculate the nuclear-reaction feed function 𝓕 for type `"P"` (equivalent-proton
+production following Salvat & Quesada 2020 §4.2). The charged particles a reaction emits
+are replaced by the protons of equal CSDA range, weighted by w = E_b/E_eq so that the
+energy they carry is preserved.
+
+For each isotope, `equivalent_proton_spectra` interpolates the outgoing spectrum of every
+production channel at the incident energy and carries its energy points onto the
+equivalent-proton scale; each outgoing group is then integrated over those spectra by
+`integrate_equivalent_proton_group`. A group narrower than the tabulation receives its
+share of the interval covering it and one wider than it receives the whole, so both the
+number of equivalent protons and the energy they carry are conserved whatever the group
+structure.
+
+The angular distribution is isotropic, so only the Legendre moment L=0 is filled.
+
+# Input Argument(s)
+- `Z::Vector{Int64}` : atomic numbers of the elements composing the material.
+- `atz::Vector{Float64}` : atomic fraction of each element.
+- `ωz::Vector{Float64}` : weight fraction of each element.
+- `ρ::Float64` : material density [g/cm³].
+- `state_of_matter::String` : material state (`"solid"`, `"liquid"`, or `"gas"`).
+- `L::Int64` : Legendre truncation order.
+- `Ei::Float64` : incoming particle energy [mₑc²].
+- `Eout::Vector{Float64}` : outgoing energy group boundaries [mₑc²], decreasing.
+- `Ng::Int64` : number of outgoing energy groups.
+- `interaction::Nuclear_Reaction` : nuclear-reaction interaction structure.
+- `gi::Int64` : incoming particle group index.
+- `Ngi::Int64` : number of incoming particle groups.
+- `particles::Vector{Particle}` : particles in the simulation.
+- `type::String` : interaction type string (`"P"`).
+- `incoming_particle::Particle` : incoming particle.
+- `Ein::Vector{Float64}` : incoming energy group boundaries [mₑc²].
+- `I_eff::Float64` : effective mean excitation energy override [mₑc²]; NaN ⟹ tables.
+- `A::Vector{Vector{Int64}}` : isotope mass numbers per element.
+- `atpercentA::Vector{Vector{Float64}}` : isotope atomic fractions per element.
+
+# Output Argument(s)
+- `𝓕::Array{Float64,2}` : feed function [cm²], size (Ng+1, L+1).
+- `𝓕ₑ::Vector{Float64}` : energy-weighted feed function [cm² × mₑc²], size (Ng+1).
+
+# Reference(s)
+- Salvat & Quesada (2020), NIMB 475, 49–62, §4.2 equivalent-proton method.
+- MacFarlane et al. (2021), The NJOY Nuclear Data Processing System, Version 2012.
+"""
+function feed_nuclear_reaction(Z::Vector{Int64}, atz::Vector{Float64},
+        ωz::Vector{Float64}, ρ::Float64, N_density::Float64, state_of_matter::String,
+        L::Int64, Ei::Float64, Eout::Vector{Float64}, Ng::Int64,
+        interaction::Nuclear_Reaction, _gi::Int64, _Ngi::Int64,
+        _particles::Vector{Particle}, _type::String,
+        incoming_particle::Particle, _Ein::Vector{Float64},
+        I_eff::Float64,
+        A::Vector{Vector{Int64}},
+        atpercentA::Vector{Vector{Float64}})
+
+#----
+# Initialization
+#----
+𝓕  = zeros(Ng+1, L+1)
+𝓕ₑ = zeros(Ng+1)
+
+ptype = get_type(incoming_particle)
+haskey(interaction.production_db, ptype) || error("Requested nuclear production feed database is missing for $ptype.")
+E_in = Ei * M_E_C2_MEV * 1e6   # mₑc² -> eV, the unit of the ENDF distributions
+
+#----
+# Feed function over all groups
+#----
+
+# Loop over the compound elements
+Nz = length(Z)
+for i in range(1,Nz)
+
+    # Loop over isotopes
+    for (Ai, atai) in zip(A[i], atpercentA[i])
+        haskey(interaction.production_db[ptype], (Z[i], Ai)) || error("Requested nuclear production feed isotope ($(Z[i]),$Ai) is missing.")
+        channels = interaction.production_db[ptype][(Z[i], Ai)]
+        isempty(channels) && error("Requested nuclear production feed has no evaluated channels for ($(Z[i]),$Ai).")
+
+        # Energy leaving with the neutrons and the photons, which nothing transports. It
+        # is added to the energy-weighted feed without any matching entry in 𝓕, so that
+        # Σe = Σtₑ - ΣΣsₑ loses it while no particle is put in a group for it. Σsₑ enters
+        # the balance only through its sum over the outgoing groups, so the group it is
+        # filed under is immaterial; it goes in the first one.
+        if interaction.get_is_neutral_escape()
+            𝓕ₑ[1] += neutral_energy_release(channels, E_in) * atz[i] * atai
+        end
+
+        # Outgoing spectra of this isotope, carried onto the equivalent-proton scale
+        spectra = equivalent_proton_spectra(interaction, channels, E_in, Z[i], Ai,
+                                            Z, ωz, atz, ρ, N_density, state_of_matter,
+                                            I_eff)
+        isempty(spectra) && continue
+
+        # Loop over outgoing groups
+        for gf in range(1,Ng)
+
+            # Final energy group
+            Ef⁻ = Eout[gf]; Ef⁺ = Eout[gf+1]
+
+            # Integration over the energy group
+            𝓕i, 𝓕iₑ = integrate_equivalent_proton_group(spectra, Ef⁺, Ef⁻, L)
+            𝓕i[1] == 0.0 && continue
+
+            𝓕[gf,:] .+= 𝓕i  .* (atz[i] * atai)
+            𝓕ₑ[gf]  += 𝓕iₑ  * (atz[i] * atai)
+        end
+    end
+end
+return 𝓕, 𝓕ₑ
+end

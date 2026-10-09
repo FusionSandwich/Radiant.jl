@@ -509,6 +509,34 @@ function find_first_mf(lines::Vector{String}, mf_target::Int)
     return nothing
 end
 
+"""
+    list_mf_mts(lines::Vector{String}, mf_target::Int)
+
+Lists the MT reaction numbers of the sections present under a requested MF file identifier.
+
+# Input Argument(s)
+- `lines::Vector{String}` : ENDF file lines.
+- `mf_target::Int` : requested MF number.
+
+# Output Argument(s)
+- `mts::Vector{Int}` : sorted MT numbers found under `mf_target`, excluding the MT=0
+  section terminators.
+
+# Reference(s)
+- ENDF-6 Formats Manual, MF/MT tape organization.
+"""
+function list_mf_mts(lines::Vector{String}, mf_target::Int)
+    mts = Set{Int}()
+    for ln in lines
+        if length(ln) < 80; continue; end
+        (_,_,_,_,_,_, _, mf, mt, _) = parse_endf_line(ln)
+        if mf == mf_target && mt != 0
+            push!(mts, mt)
+        end
+    end
+    return sort!(collect(mts))
+end
+
 # =============================================================================
 # Clean extraction functions (logic without verbose output)
 # =============================================================================
@@ -565,11 +593,136 @@ function parse_law5_section(lines::Vector{String}, i::Int)
 end
 
 """
+    parse_law1_section(lines::Vector{String}, i::Int)
+
+Parses an ENDF MF=6 LAW=1 continuum energy-angle distribution section. The TAB2 header of
+a LAW=1 section is `[0.0, 0.0, LANG, LEP, NR, NE]`, so its first integer is the
+representation flag LANG and its second the interpolation law LEP of the secondary energy
+(1: histogram, 2: linear-linear). The outgoing energies and the spectrum integrated over
+the angles are stored whatever the representation, since they occupy the same two slots of
+a LIST entry for every LANG; the precompound fraction is stored for LANG=2 (Kalbach-Mann)
+only, the other representations carrying their angular information differently.
+
+Discrete lines, the first `ND` entries of a LIST record, carry a probability rather than a
+probability density and would need a distinct treatment; the sections having some are
+skipped with a warning.
+
+# Input Argument(s)
+- `lines::Vector{String}` : ENDF file lines.
+- `i::Int` : index of the LAW=1 TAB2 header.
+
+# Output Argument(s)
+- `(LANG, LEP, E_in, NBT_Ei, INT_Ei, E_out, f, r, i_next)::Tuple` : representation flag,
+  interpolation law of the secondary energy, incident-energy grid [eV], interpolation
+  metadata for E_in, per-incident-energy outgoing energy grids [eV], probability-density
+  arrays [eV⁻¹], precompound-fraction arrays (empty unless LANG=2), and next unread line
+  index.
+
+# Reference(s)
+- ENDF-6 Formats Manual, MF=6, LAW=1 continuum distributions, LANG=2 Kalbach-Mann.
+"""
+function parse_law1_section(lines::Vector{String}, i::Int)
+    (C1, C2, LANG, LEP, NR, NE, NBT_Ei, INT_Ei, mat, mf, mt, ns, i, _) = read_TAB2(lines, i)
+
+    E_in_vec  = Float64[]
+    E_out_vec = Vector{Vector{Float64}}()
+    f_vec     = Vector{Vector{Float64}}()
+    r_vec     = Vector{Vector{Float64}}()
+    LANG == 2 || error("Unsupported production LAW1 LANG=$LANG; only Kalbach-Mann LANG=2 is admitted.")
+    LEP in (1,2) || error("Unsupported production LAW1 LEP=$LEP.")
+    NE >= 2 && !isempty(NBT_Ei) && !isempty(INT_Ei) ||
+        error("Missing incident-energy interpolation in LAW1.")
+    validate_interp_metadata(NBT_Ei,INT_Ei,NE,"LAW1 incident energy";supported_ints=(1,2))
+
+    for _ in 1:NE
+        (C1l, Ein, ND, NA, NW, NEP, payload, mat2, mf2, mt2, ns2, i, _) = read_LIST(lines, i)
+        push!(E_in_vec, Ein)
+
+        ND == 0 || error("Unsupported LAW1 discrete lines ND=$ND at $Ein eV.")
+        NA == 1 || error("Unsupported LAW1 angular payload NA=$NA; author true-angular mode requires the Kalbach r parameter only.")
+        NEP >= 2 && NW == NEP*(2+NA) && length(payload) == NW ||
+            error("Malformed LAW1 spectrum payload at $Ein eV.")
+        validate_section_ids(mat2,mf2,mt2,mat,mf,mt,"LAW1 LIST")
+
+        if NA >= 0 && ND == 0
+            # Whatever the representation, a LIST entry opens with the outgoing energy
+            # followed by the spectrum integrated over the angles: the Kalbach f for
+            # LANG=2, the Legendre coefficient b₀ for LANG=1, the first tabulated value
+            # for LANG=11 to 15. What comes after is the angular information, of which
+            # only the Kalbach precompound fraction r is read.
+            stride  = 2 + NA
+            E_out_j = Float64[]
+            f_j     = Float64[]
+            r_j     = Float64[]
+            for j in 1:NEP
+                base = (j - 1) * stride + 1
+                push!(E_out_j, payload[base])
+                push!(f_j,     payload[base + 1])
+                # An isotropic product carries no angular parameter at all, NA = 0.
+                (LANG == 2 && NA >= 1) && push!(r_j, payload[base + 2])
+            end
+            all(isfinite,E_out_j) && all(E_out_j .>= 0.0) && all(diff(E_out_j) .> 0.0) ||
+                error("Invalid LAW1 outgoing-energy grid.")
+            all(isfinite,f_j) && all(f_j .>= 0.0) && any(f_j .> 0.0) ||
+                error("Invalid or empty LAW1 spectrum density.")
+            length(r_j) == NEP && all(isfinite,r_j) && all(0.0 .<= r_j .<= 1.0) ||
+                error("Invalid LAW1 Kalbach r payload.")
+            push!(E_out_vec, E_out_j)
+            push!(f_vec,     f_j)
+            push!(r_vec,     r_j)
+        else
+            push!(E_out_vec, Float64[])
+            push!(f_vec,     Float64[])
+            push!(r_vec,     Float64[])
+        end
+    end
+
+    all(isfinite,E_in_vec) && all(E_in_vec .>= 0.0) && all(diff(E_in_vec) .> 0.0) ||
+        error("Invalid LAW1 incident-energy grid.")
+    return LANG, LEP, E_in_vec, NBT_Ei, INT_Ei, E_out_vec, f_vec, r_vec, i
+end
+
+"""
+    parse_law2_section(lines::Vector{String}, i::Int)
+
+Parses an ENDF MF=6 LAW=2 discrete two-body kinematics section. The angular distribution
+at each incident energy is stored as the raw LIST payload (Legendre coefficients or
+tabulated cosines, depending on LANG).
+
+# Input Argument(s)
+- `lines::Vector{String}` : ENDF file lines.
+- `i::Int` : index of the LAW=2 TAB2 header.
+
+# Output Argument(s)
+- `(E_in, NBT_Ei, INT_Ei, B, i_next)::Tuple` : incident-energy grid [eV], interpolation
+  metadata, per-energy angular-distribution payload arrays, and next unread line index.
+
+# Reference(s)
+- ENDF-6 Formats Manual, MF=6, LAW=2 discrete two-body kinematics.
+"""
+function parse_law2_section(lines::Vector{String}, i::Int)
+    (C1, C2, L1, L2, NR, NE, NBT_Ei, INT_Ei, mat, mf, mt, ns, i, _) = read_TAB2(lines, i)
+
+    E_in_vec = Float64[]
+    B_vec    = Vector{Vector{Float64}}()
+
+    for _ in 1:NE
+        (C1l, Ein, LANG, L2l, NW, NL, payload, mat2, mf2, mt2, ns2, i, _) = read_LIST(lines, i)
+        push!(E_in_vec, Ein)
+        push!(B_vec,    copy(payload))
+    end
+
+    return E_in_vec, NBT_Ei, INT_Ei, B_vec, i
+end
+
+"""
     parse_product_subsection(lines::Vector{String}, i::Int, ZA::Float64, AWR::Float64)
 
-Parses one ENDF MF=6 product subsection, including its product TAB1 record. LAW=5
-subsections are fully parsed; unsupported LAW values return only the product header and
-yield/interpolation metadata, leaving any LAW-specific records unread.
+Parses one ENDF MF=6 product subsection, including its product TAB1 record. LAW=1
+(continuum energy-angle, including Kalbach-Mann LANG=2), LAW=2 (discrete two-body), and
+LAW=5 (charged-particle elastic) subsections are fully parsed and returned. LAW=0, 3, and
+4 carry no additional records after the TAB1. LAW=6 advances past one extra CONT record.
+All other LAW values are rejected because their records and physics are unsupported.
 
 # Input Argument(s)
 - `lines::Vector{String}` : ENDF file lines.
@@ -578,8 +731,7 @@ yield/interpolation metadata, leaving any LAW-specific records unread.
 - `AWR::Float64` : target atomic-weight ratio from the MF=6 section header.
 
 # Output Argument(s)
-- `(product, i_next)::Tuple` : product NamedTuple and the next unread line index. For
-  unsupported LAW values, `i_next` points immediately after the product TAB1 record.
+- `(product, i_next)::Tuple` : product NamedTuple and the next unread line index.
 
 # Reference(s)
 - ENDF-6 Formats Manual, MF=6 product subsections.
@@ -588,36 +740,72 @@ function parse_product_subsection(lines::Vector{String}, i::Int, ZA::Float64, AW
     # Read product TAB1
     (ZAP,AWP,LIP,LAW,NR,NP,NBT,INT,Eint,yi, _, _, _, _, i, _) = read_TAB1(lines, i)
 
-    mupni_tables = Dict{Float64, Tuple{Vector{Float64}, Vector{Float64}}}()
+    # LAW=5 fields (elastic charged-particle)
+    mupni_tables  = Dict{Float64, Tuple{Vector{Float64}, Vector{Float64}}}()
     ba_tables_ltp1 = Dict{Float64, Tuple{Int, Vector{Float64}, Vector{ComplexF64}}}()
-    c_tables_ltp2 = Dict{Float64, Tuple{Int, Vector{Float64}}}()
-    SPI_seen = nothing
+    c_tables_ltp2  = Dict{Float64, Tuple{Int, Vector{Float64}}}()
+    SPI_seen  = nothing
     LIDP_seen = nothing
-    LTP_seen = nothing
-    NBT_seen = Int[]
-    INT_seen = Int[]
+    LTP_seen  = nothing
+    NBT_seen  = Int[]
+    INT_seen  = Int[]
 
-    # Handle LAW-specific structure
-    if LAW == 5
-        (SPI_seen, LIDP_seen, LTP_seen, mupni_tables, ba_tables_ltp1, c_tables_ltp2, NBT_seen, INT_seen, i) =
+    # LAW=1 Kalbach-Mann fields
+    law1_LANG    = nothing
+    law1_LEP     = nothing
+    law1_E_in    = nothing
+    law1_NBT_Ei  = nothing
+    law1_INT_Ei  = nothing
+    law1_E_out   = nothing
+    law1_f       = nothing
+    law1_r       = nothing
+
+    # LAW=2 discrete two-body fields
+    law2_E_in   = nothing
+    law2_NBT_Ei = nothing
+    law2_INT_Ei = nothing
+    law2_B      = nothing
+
+    if LAW == 0 || LAW == 3 || LAW == 4
+        # No distribution records after TAB1
+    elseif LAW == 1
+        (law1_LANG, law1_LEP, law1_E_in, law1_NBT_Ei, law1_INT_Ei,
+         law1_E_out, law1_f, law1_r, i) = parse_law1_section(lines, i)
+    elseif LAW == 2
+        (law2_E_in, law2_NBT_Ei, law2_INT_Ei, law2_B, i) = parse_law2_section(lines, i)
+    elseif LAW == 5
+        (SPI_seen, LIDP_seen, LTP_seen,
+         mupni_tables, ba_tables_ltp1, c_tables_ltp2, NBT_seen, INT_seen, i) =
             parse_law5_section(lines, i)
+    elseif LAW == 6
+        # Single CONT record (phase-space distribution parameters)
+        (_, _, _, _, _, _, _, _, _, _, i, _) = read_CONT(lines, i)
+    else
+        error("Unsupported MF6 product LAW=$LAW; no generic record skipping is admitted.")
     end
 
     return (ZAP=ZAP, AWP=AWP, LIP=LIP, LAW=LAW, Eint=Eint, yi=yi,
+            yield_NBT=NBT, yield_INT=INT,
             mupni_tables=mupni_tables, ba_tables_ltp1=ba_tables_ltp1, c_tables_ltp2=c_tables_ltp2,
             SPI=SPI_seen, LIDP=LIDP_seen, LTP=LTP_seen,
             mf6_nbt=NBT_seen, mf6_int=INT_seen,
+            law1_LANG=law1_LANG, law1_LEP=law1_LEP,
+            law1_E_in=law1_E_in, law1_NBT_Ei=law1_NBT_Ei,
+            law1_INT_Ei=law1_INT_Ei, law1_E_out=law1_E_out, law1_f=law1_f, law1_r=law1_r,
+            law2_E_in=law2_E_in, law2_NBT_Ei=law2_NBT_Ei, law2_INT_Ei=law2_INT_Ei,
+            law2_B=law2_B,
             ZA=ZA, AWR=AWR), i
 end
 
 """
-    read_mf3_mt(lines::Vector{String}, mt::Int)
+    read_mf3_mt(lines::Vector{String}, mt::Int; source::AbstractString="ENDF data")
 
 Reads an ENDF MF=3 cross-section table for a requested MT reaction.
 
 # Input Argument(s)
 - `lines::Vector{String}` : ENDF file lines.
 - `mt::Int` : requested MT reaction number.
+- `source::AbstractString="ENDF data"` : source label used in error messages.
 
 # Output Argument(s)
 - `data::Tuple` : target `ZA`, `AWR`, energy grid, cross-section values, and TAB1
@@ -626,12 +814,12 @@ Reads an ENDF MF=3 cross-section table for a requested MT reaction.
 # Reference(s)
 - ENDF-6 Formats Manual, MF=3 reaction cross sections.
 """
-function read_mf3_mt(lines::Vector{String}, mt::Int)
+function read_mf3_mt(lines::Vector{String}, mt::Int; source::AbstractString="ENDF data")
     i_mf3 = find_first_mf(lines, 3)
-    i_mf3 === nothing && error("MF=3 not found.")
+    i_mf3 === nothing && error("MF=3 not found in $(source).")
 
     i0 = find_section_start(lines, 3, mt; start_i=i_mf3)
-    i0 === nothing && error("MF=3 MT=$mt not found.")
+    i0 === nothing && error("MF=3 MT=$mt not found in $(source).")
 
     (ZA,AWR,JP,LCT,NK,zero, mat,mf,mt_check,ns, i, _) = read_CONT(lines, i0)
     validate_section_ids(mat, mf, mt_check, mat, 3, mt, "MF=3 HEAD")
@@ -645,9 +833,8 @@ end
     read_mf6_mt(lines::Vector{String}, mt::Int; source::AbstractString="ENDF data")
 
 Reads ENDF MF=6 product energy-angle distributions for a requested MT reaction. LAW=5
-products are parsed fully; a final unsupported product is allowed as a header-only recoil
-or residual product, while unsupported non-final products throw an error because their
-record length is not known here.
+products are parsed fully; unsupported LAW identifiers are rejected. LCT is retained
+on each product for explicit production-frame admission.
 
 # Input Argument(s)
 - `lines::Vector{String}` : ENDF file lines.
@@ -673,12 +860,16 @@ function read_mf6_mt(lines::Vector{String}, mt::Int; source::AbstractString="END
     validate_section_ids(mat, mf, mt_check, mat, 6, mt, "MF=6 HEAD")
 
     products = NamedTuple[]
-    for kprod in 1:NK
-        prod, i = parse_product_subsection(lines, i, ZA, AWR)
-        if prod.LAW != 5 && kprod != NK
-            error("Unsupported MF=6 product LAW=$(prod.LAW) before the final product; cannot skip LAW-specific data safely.")
+    for _ in 1:NK
+        (_,_,_,law,_,_,matp,mfp,mtp,_,_,_) = read_CONT(lines,i)
+        validate_section_ids(matp,mfp,mtp,mat,6,mt,"MF6 product TAB1")
+        if law in (1,2,5)
+            (_,_,_,_,_,_,_,_,_,_,_,_,_,_,j,_) = read_TAB1(lines,i)
+            (_,_,_,_,_,_,matlaw,mflaw,mtlaw,_,_,_) = read_CONT(lines,j)
+            validate_section_ids(matlaw,mflaw,mtlaw,mat,6,mt,"MF6 product LAW header")
         end
-        push!(products, prod)
+        prod, i = parse_product_subsection(lines, i, ZA, AWR)
+        push!(products, merge(prod, (LCT=LCT,)))
     end
 
     return products

@@ -91,6 +91,7 @@ end
 
 part = solver.get_particle()
 solver_type,is_CSD = solver.get_solver_type()
+prepare_author_straggling(cross_sections,part,:GN,is_CSD,solver.get_fast_path())
 Nmat = cross_sections.get_number_of_materials()
 Ng = cross_sections.get_number_of_groups(part)
 if is_CSD

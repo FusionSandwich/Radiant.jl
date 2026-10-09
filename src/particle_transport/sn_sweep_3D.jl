@@ -54,7 +54,7 @@ Compute the flux solution along one direction in 3D geometry.
 N/A
 
 """
-function sn_sweep_3D(𝚽l::Array{Float64,5},Ql::Array{Float64,5},Σt::Vector{Float64},mat::Array{Int64,3},Ns::Vector{Int64},Δs::Vector{Vector{Float64}},Ω::Vector{Float64},Mn::Vector{Float64},Dn::Vector{Float64},P::Int64,Mnx⁻::Vector{Float64},Dnx⁻::Vector{Float64},Mny⁻::Vector{Float64},Dny⁻::Vector{Float64},Mnz⁻::Vector{Float64},Dnz⁻::Vector{Float64},Np_surf::Int64,𝒪::Vector{Int64},Nm::Vector{Int64},C::Vector{Float64},ω::Vector{Array{Float64}},sources::Matrix{Union{Float64,Array{Float64}}},isAdapt::Bool,isCSD::Bool,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},𝒲::Array{Float64},isFC::Bool,𝚽x12⁻,𝚽y12⁻,𝚽z12⁻,boundary_conditions,Np_source)
+function sn_sweep_3D(𝚽l::Array{Float64,5},Ql::Array{Float64,5},Σt::Vector{Float64},mat::Array{Int64,3},Ns::Vector{Int64},Δs::Vector{Vector{Float64}},Ω::Vector{Float64},Mn::Vector{Float64},Dn::Vector{Float64},P::Int64,Mnx⁻::Vector{Float64},Dnx⁻::Vector{Float64},Mny⁻::Vector{Float64},Dny⁻::Vector{Float64},Mnz⁻::Vector{Float64},Dnz⁻::Vector{Float64},Np_surf::Int64,𝒪::Vector{Int64},Nm::Vector{Int64},C::Vector{Float64},ω::Vector{Array{Float64}},sources::Matrix{Union{Float64,Array{Float64}}},isAdapt::Bool,isCSD::Bool,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},𝒲::Array{Float64},𝒲₂::Array{Float64},Tstr⁻::Vector{Float64},Tstr⁺::Vector{Float64},Tstr::Array{Float64},isFC::Bool,𝚽x12⁻,𝚽y12⁻,𝚽z12⁻,boundary_conditions,Np_source)
 
     # Initialization
     𝒪x = 𝒪[1]; 𝒪y = 𝒪[2]; 𝒪z = 𝒪[3]; 𝒪E = 𝒪[4]
@@ -181,7 +181,7 @@ function sn_sweep_3D(𝚽l::Array{Float64,5},Ql::Array{Float64,5},Σt::Vector{Fl
                 if ~isCSD
                     𝚽n,𝚽x12[:,iy,iz],𝚽y12[:,iz],𝚽z12 = flux_3D_BTE(μ,η,ξ,Σt[mat[ix,iy,iz]],Δx[ix],Δy[iy],Δz[iz],Qn,𝚽x12[:,iy,iz],𝚽y12[:,iz],𝚽z12,𝒪x,𝒪y,𝒪z,C,copy(ω[1]),copy(ω[2]),copy(ω[3]),isAdapt,isFC)
                 else
-                    𝚽n,𝚽x12[:,iy,iz],𝚽y12[:,iz],𝚽z12,𝚽E12[:,ix,iy,iz] = flux_3D_BFP(μ,η,ξ,Σt[mat[ix,iy,iz]],S⁻[mat[ix,iy,iz]],S⁺[mat[ix,iy,iz]],S[mat[ix,iy,iz],:],ΔE,Δx[ix],Δy[iy],Δz[iz],Qn,𝚽x12[:,iy,iz],𝚽y12[:,iz],𝚽z12,𝚽E12[:,ix,iy,iz],𝒪E,𝒪x,𝒪y,𝒪z,C,copy(ω[1]),copy(ω[2]),copy(ω[3]),copy(ω[4]),isAdapt,𝒲,isFC)
+                    𝚽n,𝚽x12[:,iy,iz],𝚽y12[:,iz],𝚽z12,𝚽E12[:,ix,iy,iz] = flux_3D_BFP(μ,η,ξ,Σt[mat[ix,iy,iz]],S⁻[mat[ix,iy,iz]],S⁺[mat[ix,iy,iz]],S[mat[ix,iy,iz],:],ΔE,Δx[ix],Δy[iy],Δz[iz],Qn,𝚽x12[:,iy,iz],𝚽y12[:,iz],𝚽z12,𝚽E12[:,ix,iy,iz],𝒪E,𝒪x,𝒪y,𝒪z,C,copy(ω[1]),copy(ω[2]),copy(ω[3]),copy(ω[4]),isAdapt,𝒲,𝒲₂,Tstr⁻[mat[ix,iy,iz]],Tstr⁺[mat[ix,iy,iz]],Tstr[mat[ix,iy,iz],:],isFC)
                 end
 
                 # Calculation of the Legendre components of the flux

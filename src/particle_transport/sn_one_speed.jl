@@ -78,7 +78,7 @@ Solve the one-speed transport equation for a given particle.
   Calculations.
 
 """
-function sn_one_speed(𝚽l::Array{Float64},Qlout::Array{Float64},Σt::Vector{Float64},Σs::Array{Float64},mat::Array{Int64,3},ndims::Int64,Nd::Int64,ig::Int64,Ns::Vector{Int64},Δs::Vector{Vector{Float64}},Ω::Vector{Vector{Float64}},Mn::Array{Float64,2},Dn::Array{Float64,2},Np::Int64,pl::Vector{Int64},Mn_surf::Vector{Array{Float64}},Dn_surf::Vector{Array{Float64}},Np_surf::Int64,n_to_n⁺::Vector{Vector{Int64}},𝒪::Vector{Int64},Nm::Vector{Int64},isFC::Bool,C::Vector{Float64},ω::Vector{Array{Float64}},I_max::Int64,ϵ_max::Float64,sources::Array{Union{Array{Float64},Float64}},isAdapt::Bool,isCSD::Bool,solver::Int64,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},T::Vector{Float64},ℳ::Array{Float64},𝒜::String,Ntot::Int64,is_EM::Bool,ℳ_EM::Array{Float64},𝒲::Array{Float64},boundary_conditions::Vector{Int64},Np_source::Int64,gmres_restart::Int64=30,anderson_depth::Int64=3)
+function sn_one_speed(𝚽l::Array{Float64},Qlout::Array{Float64},Σt::Vector{Float64},Σs::Array{Float64},mat::Array{Int64,3},ndims::Int64,Nd::Int64,ig::Int64,Ns::Vector{Int64},Δs::Vector{Vector{Float64}},Ω::Vector{Vector{Float64}},Mn::Array{Float64,2},Dn::Array{Float64,2},Np::Int64,pl::Vector{Int64},Mn_surf::Vector{Array{Float64}},Dn_surf::Vector{Array{Float64}},Np_surf::Int64,n_to_n⁺::Vector{Vector{Int64}},𝒪::Vector{Int64},Nm::Vector{Int64},isFC::Bool,C::Vector{Float64},ω::Vector{Array{Float64}},I_max::Int64,ϵ_max::Float64,sources::Array{Union{Array{Float64},Float64}},isAdapt::Bool,isCSD::Bool,solver::Int64,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},T::Vector{Float64},ℳ::Array{Float64},𝒜::String,Ntot::Int64,is_EM::Bool,ℳ_EM::Array{Float64},𝒲::Array{Float64},𝒲₂::Array{Float64},Tstr⁻::Vector{Float64},Tstr⁺::Vector{Float64},Tstr::Array{Float64},boundary_conditions::Vector{Int64},Np_source::Int64,gmres_restart::Int64=30,anderson_depth::Int64=3)
 
     # Flux Initialization
     𝚽E12_temp = Array{Float64}(undef)
@@ -120,7 +120,7 @@ function sn_one_speed(𝚽l::Array{Float64},Qlout::Array{Float64},Σt::Vector{Fl
     end
 
     # Shorthand wrapper around one source-iteration pass
-    pass!(homogeneous) = sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽y12_temp,𝚽z12_temp,𝚽E12_temp,Ql,Qlout,𝚽E12,Σt,Σs,mat,ndims,Nd,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,C,ω,sources,isAdapt,isCSD,solver,ΔE,S⁻,S⁺,S,T,ℳ,is_EM,ℳ_EM,𝒲,boundary_conditions,Np_source;homogeneous=homogeneous)
+    pass!(homogeneous) = sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽y12_temp,𝚽z12_temp,𝚽E12_temp,Ql,Qlout,𝚽E12,Σt,Σs,mat,ndims,Nd,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,C,ω,sources,isAdapt,isCSD,solver,ΔE,S⁻,S⁺,S,T,ℳ,is_EM,ℳ_EM,𝒲,𝒲₂,Tstr⁻,Tstr⁺,Tstr,boundary_conditions,Np_source;homogeneous=homogeneous)
     
     # State vector z = (𝚽l, incoming boundary angular fluxes on each active axis)
     if ndims == 1

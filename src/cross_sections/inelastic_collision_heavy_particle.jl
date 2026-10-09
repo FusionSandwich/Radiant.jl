@@ -359,8 +359,11 @@ function integrate_inelastic_collision_heavy_particle_per_subshell(Ei::Float64,n
                 log_term = log1p(ΔW / W⁻)
             end
             σni = log_term - (β² / W_ridge) * ΔW + ((1 - β²)/(4 * ratio_mass^2)) * ΔW * (W⁺ + W⁻)
+        elseif n == 2
+            J₂(W) = W - β²*W^2/(2*W_ridge) + (1-β²)/(6*ratio_mass^2)*W^3
+            σni = J₂(W⁺) - J₂(W⁻)
         else
-            error("Integral is given only for n=0 or n=1.")
+            error("Integral is given only for n=0, n=1 or n=2.")
         end
     end
     σni *= 2*π*rₑ^2/β² * Zc^2

@@ -25,6 +25,13 @@ Npart = cross_sections.get_number_of_particles()
 materials = cross_sections.get_materials()
 particles = cross_sections.get_particles()
 interactions = cross_sections.get_interactions()
+for particle in particles
+    if author_straggling_requested(cross_sections,particle)
+        for material in materials
+            author_straggling_material(material)
+        end
+    end
+end
 ρ = zeros(Nmat)
 state_of_matter = Vector{String}()
 Z = Vector{Vector{Int64}}(undef,Nmat)
@@ -47,9 +54,6 @@ for n in range(1,Nmat)
 end
 A, atpercentA = material_isotopic_composition(materials, Z)
 isotopes = unique_isotopes(Z, A)
-for interaction in interactions
-    initialize_dispatch(interaction, particles, isotopes)
-end
 
 #----
 # Generate the group structure
@@ -72,6 +76,14 @@ for n in range(1,Npart)
 end
 
 #----
+# Initialization of the interaction data, which requires the group structure to check the
+# energy range covered by the tabulated data.
+#----
+for interaction in interactions
+    initialize_dispatch(interaction, particles, isotopes; energy_boundaries=Eᵇ)
+end
+
+#----
 # Deal with interaction interdependances
 #----
 interaction_interdependances(interactions,particles)
@@ -82,7 +94,7 @@ interaction_interdependances(interactions,particles)
 multigroup_cross_sections = Array{Multigroup_Cross_Sections}(undef,Npart,Nmat)
 for i in range(1,Npart), n in range(1,Nmat)
     mcs = Multigroup_Cross_Sections(Ng[i])
-    Σt = zeros(Ng[i]); Σa = zeros(Ng[i]); Σe = zeros(Ng[i]+1); Σc = zeros(Ng[i]+1); Sb = zeros(Ng[i]+1); S = zeros(Ng[i]); T = zeros(Ng[i]);
+    Σt = zeros(Ng[i]); Σa = zeros(Ng[i]); Σe = zeros(Ng[i]+1); Σc = zeros(Ng[i]+1); Sb = zeros(Ng[i]+1); S = zeros(Ng[i]); T = zeros(Ng[i]); Tb = zeros(Ng[i]+1);
     for j in range(1,Npart)
         Σsl = zeros(Ng[i],Ng[j],L+1)
         for interaction in interactions
@@ -90,8 +102,8 @@ for i in range(1,Npart), n in range(1,Nmat)
                 if pin != get_type(particles[i]) || pout != get_type(particles[j]) continue end
                 for type in interaction.get_types(pin,pout)
                     println("\n Interaction: $(typeof(interaction)) | Type: $type | Incoming particle: $(get_type(particles[i])) | Outgoing particle: $(get_type(particles[j]))")
-                    @time Σsli, Σti, Σai, Σei, Σci, Sbi, Si, Ti = multigroup(Z[n],ωz[n],ρ[n],state_of_matter[n],Eᵇ[i],Eᵇ[j],L,interaction,type,particles[i],particles[j],particles,interactions,I_eff[n],A[n],atpercentA[n],S_user[n])
-                    Σsl .+= Σsli; Σt .+= Σti; Σa .+= Σai; Σe .+= Σei; Σc .+= Σci; Sb .+= Sbi; S .+= Si; T .+= Ti;
+                    @time Σsli, Σti, Σai, Σei, Σci, Sbi, Si, Ti, Tbi = multigroup(Z[n],ωz[n],ρ[n],state_of_matter[n],Eᵇ[i],Eᵇ[j],L,interaction,type,particles[i],particles[j],particles,interactions,I_eff[n],A[n],atpercentA[n],S_user[n])
+                    Σsl .+= Σsli; Σt .+= Σti; Σa .+= Σai; Σe .+= Σei; Σc .+= Σci; Sb .+= Sbi; S .+= Si; T .+= Ti; Tb .+= Tbi;
                 end
             end
         end
@@ -101,6 +113,7 @@ for i in range(1,Npart), n in range(1,Nmat)
     mcs.set_absorption(Σa)
     mcs.set_boundary_stopping_powers(Sb)
     mcs.set_stopping_powers(S)
+    mcs.set_boundary_straggling_coefficients(Tb)
     mcs.set_momentum_transfer(T)
     mcs.set_energy_deposition(Σe)
     mcs.set_charge_deposition(Σc)

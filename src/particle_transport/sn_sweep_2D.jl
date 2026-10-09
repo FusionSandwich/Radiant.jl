@@ -51,7 +51,7 @@ Compute the flux solution along one direction in 2D geometry.
 N/A
 
 """
-function sn_sweep_2D(𝚽l::Array{Float64,4},Ql::Array{Float64,4},Σt::Vector{Float64},mat::Array{Int64,2},Ns::Vector{Int64},Δs::Vector{Vector{Float64}},Ω::Vector{Float64},Mn::Vector{Float64},Dn::Vector{Float64},P::Int64,Mnx⁻::Vector{Float64},Dnx⁻::Vector{Float64},Mny⁻::Vector{Float64},Dny⁻::Vector{Float64},Np_surf::Int64,𝒪::Vector{Int64},Nm::Vector{Int64},C::Vector{Float64},ω::Vector{Array{Float64}},sources::Matrix{Union{Float64,Array{Float64}}},isAdapt::Bool,isCSD::Bool,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},𝒲::Array{Float64},isFC::Bool,𝚽x12⁻,𝚽y12⁻,boundary_conditions,Np_source)
+function sn_sweep_2D(𝚽l::Array{Float64,4},Ql::Array{Float64,4},Σt::Vector{Float64},mat::Array{Int64,2},Ns::Vector{Int64},Δs::Vector{Vector{Float64}},Ω::Vector{Float64},Mn::Vector{Float64},Dn::Vector{Float64},P::Int64,Mnx⁻::Vector{Float64},Dnx⁻::Vector{Float64},Mny⁻::Vector{Float64},Dny⁻::Vector{Float64},Np_surf::Int64,𝒪::Vector{Int64},Nm::Vector{Int64},C::Vector{Float64},ω::Vector{Array{Float64}},sources::Matrix{Union{Float64,Array{Float64}}},isAdapt::Bool,isCSD::Bool,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},𝒲::Array{Float64},𝒲₂::Array{Float64},Tstr⁻::Vector{Float64},Tstr⁺::Vector{Float64},Tstr::Array{Float64},isFC::Bool,𝚽x12⁻,𝚽y12⁻,boundary_conditions,Np_source)
 
     # Initialization
     𝒪x = 𝒪[1]; 𝒪y = 𝒪[2]; 𝒪E = 𝒪[4]
@@ -141,7 +141,7 @@ function sn_sweep_2D(𝚽l::Array{Float64,4},Ql::Array{Float64,4},Σt::Vector{Fl
             if ~isCSD
                 𝚽n,𝚽x12[:,iy],𝚽y12 = flux_2D_BTE(μ,η,Σt[mat[ix,iy]],Δx[ix],Δy[iy],Qn,𝚽x12[:,iy],𝚽y12,𝒪x,𝒪y,C,copy(ω[1]),copy(ω[2]),isAdapt,isFC)
             else
-                𝚽n,𝚽x12[:,iy],𝚽y12,𝚽E12[:,ix,iy] = flux_2D_BFP(μ,η,Σt[mat[ix,iy]],S⁻[mat[ix,iy]],S⁺[mat[ix,iy]],S[mat[ix,iy],:],ΔE,Δx[ix],Δy[iy],Qn,𝚽x12[:,iy],𝚽y12,𝚽E12[:,ix,iy],𝒪E,𝒪x,𝒪y,C,copy(ω[1]),copy(ω[2]),copy(ω[3]),isAdapt,𝒲,isFC)
+                𝚽n,𝚽x12[:,iy],𝚽y12,𝚽E12[:,ix,iy] = flux_2D_BFP(μ,η,Σt[mat[ix,iy]],S⁻[mat[ix,iy]],S⁺[mat[ix,iy]],S[mat[ix,iy],:],ΔE,Δx[ix],Δy[iy],Qn,𝚽x12[:,iy],𝚽y12,𝚽E12[:,ix,iy],𝒪E,𝒪x,𝒪y,C,copy(ω[1]),copy(ω[2]),copy(ω[3]),isAdapt,𝒲,𝒲₂,Tstr⁻[mat[ix,iy]],Tstr⁺[mat[ix,iy]],Tstr[mat[ix,iy],:],isFC)
             end
 
             # Calculation of the Legendre components of the flux

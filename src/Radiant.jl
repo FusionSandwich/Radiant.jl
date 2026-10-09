@@ -64,6 +64,8 @@ module Radiant
         "inelastic_collision_heavy_particle.jl",
         "soft_catastrophic_cutoff.jl",
         "endf_reading.jl",
+        "nuclear_reaction_endf.jl",
+        "author_feature_admission.jl",
         "scattering_kinematics.jl",
         "elastic_scattering_endf.jl"
     ]
@@ -128,6 +130,7 @@ module Radiant
         "Elastic_Collision.jl",
         "Elastic_Scattering.jl",
         "Inelastic_Collision.jl",
+        "Nuclear_Reaction.jl",
         "Bremsstrahlung.jl",
         "Compton.jl",
         "Pair_Production.jl",
@@ -199,6 +202,7 @@ module Radiant
     # Export objects
     #----
     export Particle, Photon, Electron, Positron, Proton, Antiproton, Alpha, Muon, Antimuon
+    export Nuclear_Reaction
     export Elastic_Collision,Elastic_Scattering,Inelastic_Collision,Bremsstrahlung,Compton,Pair_Production,Photoelectric,Annihilation,Rayleigh,Relaxation,Fluorescence,Auger
     export Material,Cross_Sections,Geometry,SN,Solvers,Surface_Source,Volume_Source,Fixed_Sources,Computation_Unit,DPN,GN,CP,Electromagnetic_Field
     export Discrete_Ordinates  # backward-compatible alias for SN

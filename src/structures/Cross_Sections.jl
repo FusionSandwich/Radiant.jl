@@ -968,6 +968,35 @@ function get_boundary_stopping_powers(this::Cross_Sections,particle::Particle)
 end
 
 """
+    get_boundary_straggling_coefficients(this::Cross_Sections,particle::Particle)
+
+Get the straggling coefficients at group boundaries for a specified particle.
+
+# Input Argument(s)
+- `this::Cross_Sections` : cross-sections library.
+- `particle::Particle` : particle.
+
+# Output Argument(s)
+- `Tb::Array{Float64}` : straggling coefficients at group boundaries [in MeV²/cm].
+
+"""
+function get_boundary_straggling_coefficients(this::Cross_Sections,particle::Particle)
+    if ismissing(this.multigroup_cross_sections) error("Unable to get multigroup straggling coefficients. Missing data.") end
+    index_particle = findfirst(x -> x == particle,this.get_particles())
+    if isnothing(index_particle) error("Cross-sections don't contain data for the given particle.") end
+    Nmat = this.get_number_of_materials()
+    Ng = this.get_number_of_groups(particle)
+    Tb = zeros(Ng+1,Nmat)
+    for n in range(1,Nmat)
+        tb = this.multigroup_cross_sections[index_particle,n].get_boundary_straggling_coefficients()
+        ismissing(tb) && error("Missing straggling coefficients for material $n.")
+        length(tb) == Ng+1 && all(isfinite,tb) && all(tb .>= 0.0) || error("Invalid straggling coefficients for material $n.")
+        Tb[:,n] = tb
+    end
+    return Tb
+end
+
+"""
     get_stopping_powers(this::Cross_Sections,particle::Particle)
 
 Get the stopping powers for a specified particle.

@@ -12,6 +12,7 @@ mutable struct Multigroup_Cross_Sections
     absorption                     ::Union{Missing,Vector{Float64}}
     boundary_stopping_powers       ::Union{Missing,Vector{Float64}}
     stopping_powers                ::Union{Missing,Vector{Float64}}
+    boundary_straggling_coefficients::Union{Missing,Vector{Float64}}
     momentum_transfer              ::Union{Missing,Vector{Float64}}
     energy_deposition              ::Union{Missing,Vector{Float64}}
     charge_deposition              ::Union{Missing,Vector{Float64}}
@@ -26,6 +27,7 @@ mutable struct Multigroup_Cross_Sections
         this.absorption = missing
         this.boundary_stopping_powers = missing
         this.stopping_powers = missing
+        this.boundary_straggling_coefficients = missing
         this.momentum_transfer = missing
         this.energy_deposition = missing
         this.charge_deposition = missing
@@ -106,6 +108,44 @@ N/A
 function set_stopping_powers(this::Multigroup_Cross_Sections,stopping_powers::Vector{Float64})
     if length(stopping_powers) != this.number_of_groups error("The length of the stopping_powers don't fit the number of groups.") end
     this.stopping_powers = stopping_powers
+end
+
+"""
+    set_boundary_straggling_coefficients(this::Multigroup_Cross_Sections,
+    boundary_straggling_coefficients::Vector{Float64})
+
+To set the soft straggling coefficients at group boundaries.
+
+# Input Argument(s)
+- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
+- `boundary_straggling_coefficients::Vector{Float64}` : straggling coefficients at group
+  boundaries [in MeV²/cm].
+
+# Output Argument(s)
+N/A
+
+"""
+function set_boundary_straggling_coefficients(this::Multigroup_Cross_Sections,boundary_straggling_coefficients::Vector{Float64})
+    if length(boundary_straggling_coefficients) != this.number_of_groups + 1 error("The length of boundary_straggling_coefficients doesn't fit the number of groups.") end
+    all(isfinite, boundary_straggling_coefficients) && all(boundary_straggling_coefficients .>= 0.0) || error("Straggling coefficients must be finite and nonnegative.")
+    this.boundary_straggling_coefficients = boundary_straggling_coefficients
+end
+
+"""
+    get_boundary_straggling_coefficients(this::Multigroup_Cross_Sections)
+
+Get the soft straggling coefficients at group boundaries.
+
+# Input Argument(s)
+- `this::Multigroup_Cross_Sections` : multigroup cross-sections structure.
+
+# Output Argument(s)
+- `boundary_straggling_coefficients::Vector{Float64}` : straggling coefficients at group
+  boundaries [in MeV²/cm].
+
+"""
+function get_boundary_straggling_coefficients(this::Multigroup_Cross_Sections)
+    return this.boundary_straggling_coefficients
 end
 
 """

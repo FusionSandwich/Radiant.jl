@@ -48,7 +48,7 @@ Compute the flux solution along one direction in 1D geometry.
 N/A
 
 """
-function sn_sweep_1D(𝚽l::Array{Float64,3},Ql::Array{Float64,3},Σt::Vector{Float64},mat::Vector{Int64},Nx::Int64,Δx::Vector{Float64},μ::Float64,Mn::Vector{Float64},Dn::Vector{Float64},Np::Int64,Mnx⁻::Vector{Float64},Dnx⁻::Vector{Float64},Np_surf::Int64,𝒪::Vector{Int64},Nm::Vector{Int64},C::Vector{Float64},ω::Vector{Array{Float64}},sources::Matrix{Union{Float64, Array{Float64}}},isAdapt::Bool,isCSD::Bool,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},𝒲::Array{Float64},isFC::Bool,𝚽x12⁻::Array{Float64,3},boundary_conditions::Vector{Int64},Np_source)
+function sn_sweep_1D(𝚽l::Array{Float64,3},Ql::Array{Float64,3},Σt::Vector{Float64},mat::Vector{Int64},Nx::Int64,Δx::Vector{Float64},μ::Float64,Mn::Vector{Float64},Dn::Vector{Float64},Np::Int64,Mnx⁻::Vector{Float64},Dnx⁻::Vector{Float64},Np_surf::Int64,𝒪::Vector{Int64},Nm::Vector{Int64},C::Vector{Float64},ω::Vector{Array{Float64}},sources::Matrix{Union{Float64, Array{Float64}}},isAdapt::Bool,isCSD::Bool,ΔE::Float64,𝚽E12::Array{Float64},S⁻::Vector{Float64},S⁺::Vector{Float64},S::Array{Float64},𝒲::Array{Float64},𝒲₂::Array{Float64},Tstr⁻::Vector{Float64},Tstr⁺::Vector{Float64},Tstr::Array{Float64},isFC::Bool,𝚽x12⁻::Array{Float64,3},boundary_conditions::Vector{Int64},Np_source)
 
     # Initialization
     𝒪x = 𝒪[1]
@@ -101,7 +101,7 @@ function sn_sweep_1D(𝚽l::Array{Float64,3},Ql::Array{Float64,3},Σt::Vector{Fl
         if ~isCSD
             𝚽n,𝚽x12 = flux_1D_BTE(μ,Σt[mat[ix]],Δx[ix],Qn,𝚽x12[1],𝒪x,C,copy(ω[1]),isAdapt)
         else
-            𝚽n,𝚽x12,𝚽E12[:,ix] = flux_1D_BFP(μ,Σt[mat[ix]],Δx[ix],Qn,𝚽x12,S⁻[mat[ix]],S⁺[mat[ix]],S[mat[ix],:],ΔE,𝚽E12[:,ix],𝒪E,𝒪x,C,copy(ω[1]),copy(ω[2]),isAdapt,𝒲,isFC)
+            𝚽n,𝚽x12,𝚽E12[:,ix] = flux_1D_BFP(μ,Σt[mat[ix]],Δx[ix],Qn,𝚽x12,S⁻[mat[ix]],S⁺[mat[ix]],S[mat[ix],:],ΔE,𝚽E12[:,ix],𝒪E,𝒪x,C,copy(ω[1]),copy(ω[2]),isAdapt,𝒲,𝒲₂,Tstr⁻[mat[ix]],Tstr⁺[mat[ix]],Tstr[mat[ix],:],isFC)
         end
 
         # Calculation of the Legendre components of the flux

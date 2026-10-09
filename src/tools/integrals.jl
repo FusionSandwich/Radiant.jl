@@ -330,3 +330,30 @@ function 𝒢₈(n::Int64,a::Real,b::Real,c::Real,x::Real)
         return x^(n-1)*sqrt(R^3)/((n+2)*c) - (2*n+1)*b/(2*(n+2)*c)*𝒢₈(n-1,a,b,c,x) - (n-1)*a/((n+2)*c)*𝒢₈(n-2,a,b,c,x)
     end
 end
+
+"""
+    𝒢₉(m::Int64,n::Int64,k::Int64)
+
+Compute the integral I = 0.5 ∫ Pₘ'(x)Pₙ'(x)Pₖ(x) dx evaluated between -1 and 1,
+using the Legendre derivative identity P_n'(x) = Σ_{r<n,(n-r) odd} (2r+1) P_r(x).
+
+# Input Argument(s)
+- `m::Int64`: first Legendre polynomial index (differentiated).
+- `n::Int64`: second Legendre polynomial index (differentiated).
+- `k::Int64`: third Legendre polynomial index.
+
+# Output Argument(s)
+- `result::Float64`: integral evaluated between -1 and 1.
+
+"""
+function 𝒢₉(m::Int64,n::Int64,k::Int64)
+    result = 0.0
+    for r in 0:m-1
+        (m - r) % 2 == 0 && continue
+        for s in 0:n-1
+            (n - s) % 2 == 0 && continue
+            result += (2*r+1) * (2*s+1) * 𝒢₆(r,s,k)
+        end
+    end
+    return result
+end

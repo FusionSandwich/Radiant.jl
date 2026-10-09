@@ -30,6 +30,7 @@ mutable struct Inelastic_Collision <: Interaction
     is_focusing_møller::Bool
     is_hydrogenic_distribution_term::Bool
     is_distant_collision::Bool
+    is_straggling::Bool
     density_correction::String
     scattering_model::String
     user_ecut::Dict{Type,Float64}
@@ -54,6 +55,7 @@ mutable struct Inelastic_Collision <: Interaction
         this.is_elastic = false
         this.is_focusing_møller = false
         this.is_hydrogenic_distribution_term = false
+        this.is_straggling = true
         this.set_is_subshells_dependant(true)
         this.set_is_shell_correction(true)
         this.set_scattering_model("BFP")
@@ -1031,5 +1033,60 @@ Gives the momentum transfer for inelastic collision interaction.
 function mt(this::Inelastic_Collision)
     T = 0.0
     return T
+end
+
+
+
+"""
+    set_is_straggling(this::Inelastic_Collision,is_straggling::Bool)
+
+Activate or deactivate energy straggling (second moment of the soft energy-loss
+distribution) for heavy charged particles.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `is_straggling::Bool` : activate (true) or deactivate (false) straggling.
+
+# Output Argument(s)
+N/A
+
+"""
+function set_is_straggling(this::Inelastic_Collision,is_straggling::Bool)
+    this.is_straggling = is_straggling
+end
+
+"""
+    strag(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},ρ::Float64,
+    state_of_matter::String,Ei::Float64,Ec::Float64,particle::Particle)
+
+Gives the soft straggling coefficient (second moment of the soft energy-loss distribution
+per unit path length) for inelastic collision interaction. Only protons and alphas are
+supported; other particles return zero.
+
+# Input Argument(s)
+- `this::Inelastic_Collision` : inelastic collision structure.
+- `Z::Vector{Int64}` : atomic numbers of the elements in the material.
+- `ωz::Vector{Float64}` : weight fraction of the elements composing the material.
+- `ρ::Float64` : material density.
+- `state_of_matter::String` : state of matter.
+- `Ei::Float64` : incoming particle energy.
+- `Ec::Float64` : cutoff energy between soft and catastrophic interactions.
+- `particle::Particle` : incoming particle.
+
+# Output Argument(s)
+- `Tsoft::Float64` : soft straggling coefficient [in (mₑc²)²/cm].
+
+"""
+function strag(this::Inelastic_Collision,Z::Vector{Int64},ωz::Vector{Float64},ρ::Float64,state_of_matter::String,Ei::Float64,Ec::Float64,particle::Particle)
+
+    if !this.is_straggling || !(is_proton(particle) || is_alpha(particle)) return 0.0 end
+
+    Tsoft = 0.0
+    Nz = length(Z)
+    for i in range(1,Nz)
+        Nd = nuclei_density(Z[i],ρ)
+        Tsoft += ωz[i] * Nd * (integrate_inelastic_collision_heavy_particle(Z[i],Ei,2,particle,0.0) - integrate_inelastic_collision_heavy_particle(Z[i],Ei,2,particle,Ei-Ec))
+    end
+    return Tsoft
 end
 

@@ -52,6 +52,7 @@ Np_surf,Mn_surf,Dn_surf,n⁺_to_n,n_to_n⁺,pl_surf,pm_surf = surface_angular_po
 #----
 part = solver.get_particle()
 solver_type,is_CSD = solver.get_solver_type()
+Tb_admitted = prepare_author_straggling(cross_sections,part,:SN,is_CSD,solver.get_fast_path())
 Nmat = cross_sections.get_number_of_materials()
 Ng = cross_sections.get_number_of_groups(part)
 if is_CSD
@@ -61,7 +62,7 @@ if is_CSD
 end
 isFC = solver.get_is_full_coupling()
 schemes,𝒪,Nm = solver.get_schemes(geometry,isFC)
-ω,𝒞,is_adaptive,𝒲 = scheme_weights(𝒪,schemes,Ndims,is_CSD)
+ω,𝒞,is_adaptive,𝒲,𝒲₂ = scheme_weights(𝒪,schemes,Ndims,is_CSD)
 
 println(">>>Particle: $(get_type(part)) <<<")
 
@@ -93,6 +94,16 @@ if is_CSD
     for n in range(1,Nmat), ig in range(1,Ng)
         S[ig,n,1] = (S⁻[ig,n]+S⁺[ig,n])/2
         if (𝒪[4] > 1) S[ig,n,2] = (S⁻[ig,n]-S⁺[ig,n])/(2*sqrt(3)) end
+    end
+    T_strag⁻ = zeros(Ng,Nmat); T_strag⁺ = zeros(Ng,Nmat)
+    Tb = Tb_admitted
+    for n in range(1,Nmat)
+        T_strag⁻[:,n] = Tb[1:Ng,n] ; T_strag⁺[:,n] = Tb[2:Ng+1,n]
+    end
+    T_strag = zeros(Ng,Nmat,𝒪[4])
+    for n in range(1,Nmat), ig in range(1,Ng)
+        T_strag[ig,n,1] = (T_strag⁻[ig,n]+T_strag⁺[ig,n])/2
+        if (𝒪[4] > 1) T_strag[ig,n,2] = (T_strag⁻[ig,n]-T_strag⁺[ig,n])/(2*sqrt(3)) end
     end
 end
 
@@ -207,6 +218,9 @@ while ~(is_outer_convergence)
             Sg⁻ = S⁻[ig,:]/ΔEg
             Sg⁺ = S⁺[ig,:]/ΔEg
             Sg = S[ig,:,:]/ΔEg
+            Tstr⁻ = T_strag⁻[ig,:]/ΔEg^2
+            Tstr⁺ = T_strag⁺[ig,:]/ΔEg^2
+            Tstr = T_strag[ig,:,:]/ΔEg^2
             if solver_type ∈ [2,4]
                 Tg = T[ig,:]
             else
@@ -221,11 +235,14 @@ while ~(is_outer_convergence)
             Sg = Vector{Float64}()
             Tg = Vector{Float64}()
             ℳ = Array{Float64}(undef)
+            Tstr⁻ = Vector{Float64}()
+            Tstr⁺ = Vector{Float64}()
+            Tstr = Array{Float64}(undef)
         end
         if use_fast
             𝚽l[ig,:,:,:,:,:],𝚽E12,ρ_in[ig],Ntot = sn_one_speed_fast(𝚽l[ig,:,:,:,:,:],Qlout,Σtot[ig,:],Σs[:,ig,ig,:],mat,Ndims,Nd,ig,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,𝒞,ω,I_max,ϵ_max,surface_sources[ig,:,:],is_CSD,solver_type,ΔEg,𝚽E12,Sg⁻,Sg⁺,Sg,Tg,ℳ,𝒜,Ntot,is_EM,ℳ_EM[ig,:,:],𝒲,boundary_conditions,Np_source,need_boundary_flux,gmres_restart,anderson_depth)
         else
-        𝚽l[ig,:,:,:,:,:],𝚽E12,ρ_in[ig],Ntot = sn_one_speed(𝚽l[ig,:,:,:,:,:],Qlout,Σtot[ig,:],Σs[:,ig,ig,:],mat,Ndims,Nd,ig,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,𝒞,ω,I_max,ϵ_max,surface_sources[ig,:,:],is_adaptive,is_CSD,solver_type,ΔEg,𝚽E12,Sg⁻,Sg⁺,Sg,Tg,ℳ,𝒜,Ntot,is_EM,ℳ_EM[ig,:,:],𝒲,boundary_conditions,Np_source,gmres_restart,anderson_depth)
+        𝚽l[ig,:,:,:,:,:],𝚽E12,ρ_in[ig],Ntot = sn_one_speed(𝚽l[ig,:,:,:,:,:],Qlout,Σtot[ig,:],Σs[:,ig,ig,:],mat,Ndims,Nd,ig,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,𝒞,ω,I_max,ϵ_max,surface_sources[ig,:,:],is_adaptive,is_CSD,solver_type,ΔEg,𝚽E12,Sg⁻,Sg⁺,Sg,Tg,ℳ,𝒜,Ntot,is_EM,ℳ_EM[ig,:,:],𝒲,𝒲₂,Tstr⁻,Tstr⁺,Tstr,boundary_conditions,Np_source,gmres_restart,anderson_depth)
         end
     end
 

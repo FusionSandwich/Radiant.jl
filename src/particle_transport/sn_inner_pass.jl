@@ -14,7 +14,7 @@ The pass is the affine map `T(z) = A·z + c` over the state `z = (𝚽l, boundar
 `𝚽E12_temp` receives the outgoing energy flux (when `isCSD`); `Ql` and `𝚽*12_temp` are
 scratch. Remaining arguments mirror `sn_one_speed`.
 """
-function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽y12_temp,𝚽z12_temp,𝚽E12_temp,Ql,Qlout,𝚽E12_in,Σt,Σs,mat,ndims,Nd,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,C,ω,sources,isAdapt,isCSD,solver,ΔE,S⁻,S⁺,S,T,ℳ,is_EM,ℳ_EM,𝒲,boundary_conditions,Np_source;homogeneous::Bool)
+function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽y12_temp,𝚽z12_temp,𝚽E12_temp,Ql,Qlout,𝚽E12_in,Σt,Σs,mat,ndims,Nd,Ns,Δs,Ω,Mn,Dn,Np,pl,Mn_surf,Dn_surf,Np_surf,n_to_n⁺,𝒪,Nm,isFC,C,ω,sources,isAdapt,isCSD,solver,ΔE,S⁻,S⁺,S,T,ℳ,is_EM,ℳ_EM,𝒲,𝒲₂,Tstr⁻,Tstr⁺,Tstr,boundary_conditions,Np_source;homogeneous::Bool)
 
     # Calculation of the Legendre components of the source (in-scattering)
     if homogeneous Ql .= 0.0 else Ql .= Qlout end
@@ -56,7 +56,7 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
                 Mnx⁻ = zeros(Np)
                 Dnx⁻ = zeros(Np)
             end
-            𝚽l[:,:,:,1,1], 𝚽E12_out,𝚽x12_out = sn_sweep_1D(𝚽l[:,:,:,1,1],Ql[:,:,:,1,1],Σt,mat[:,1,1],Ns[1],Δs[1],Ω[1][n],Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Np_surf,𝒪,Nm,C,ω,sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,isFC,𝚽x12_in,boundary_conditions,Np_source_eff)
+            𝚽l[:,:,:,1,1], 𝚽E12_out,𝚽x12_out = sn_sweep_1D(𝚽l[:,:,:,1,1],Ql[:,:,:,1,1],Σt,mat[:,1,1],Ns[1],Δs[1],Ω[1][n],Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Np_surf,𝒪,Nm,C,ω,sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,𝒲₂,Tstr⁻,Tstr⁺,Tstr,isFC,𝚽x12_in,boundary_conditions,Np_source_eff)
         elseif ndims == 2
             nx⁻ = n_to_n⁺[1][n]
             nx⁺ = n_to_n⁺[2][n]
@@ -82,7 +82,7 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
                 Mny⁻ = zeros(Np)
                 Dny⁻ = zeros(Np)
             end
-            𝚽l[:,:,:,:,1],𝚽E12_out,𝚽x12_out,𝚽y12_out = sn_sweep_2D(𝚽l[:,:,:,:,1],Ql[:,:,:,:,1],Σt,mat[:,:,1],Ns[1:2],Δs[1:2],[Ω[1][n],Ω[2][n]],Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Mny⁻,Dny⁻,Np_surf,𝒪,Nm,C,ω,sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,isFC,𝚽x12_in,𝚽y12_in,boundary_conditions,Np_source_eff)
+            𝚽l[:,:,:,:,1],𝚽E12_out,𝚽x12_out,𝚽y12_out = sn_sweep_2D(𝚽l[:,:,:,:,1],Ql[:,:,:,:,1],Σt,mat[:,:,1],Ns[1:2],Δs[1:2],[Ω[1][n],Ω[2][n]],Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Mny⁻,Dny⁻,Np_surf,𝒪,Nm,C,ω,sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,𝒲₂,Tstr⁻,Tstr⁺,Tstr,isFC,𝚽x12_in,𝚽y12_in,boundary_conditions,Np_source_eff)
         elseif ndims == 3
             nx⁻ = n_to_n⁺[1][n]
             nx⁺ = n_to_n⁺[2][n]
@@ -120,7 +120,7 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
                 Mnz⁻ = zeros(Np)
                 Dnz⁻ = zeros(Np)
             end
-            𝚽l,𝚽E12_out,𝚽x12_out,𝚽y12_out,𝚽z12_out = sn_sweep_3D(𝚽l,Ql,Σt,mat,Ns,Δs,[Ω[1][n],Ω[2][n],Ω[3][n]],Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Mny⁻,Dny⁻,Mnz⁻,Dnz⁻,Np_surf,𝒪,Nm,C,ω,sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,isFC,𝚽x12_in,𝚽y12_in,𝚽z12_in,boundary_conditions,Np_source_eff)
+            𝚽l,𝚽E12_out,𝚽x12_out,𝚽y12_out,𝚽z12_out = sn_sweep_3D(𝚽l,Ql,Σt,mat,Ns,Δs,[Ω[1][n],Ω[2][n],Ω[3][n]],Mn[n,:],Dn[:,n],Np,Mnx⁻,Dnx⁻,Mny⁻,Dny⁻,Mnz⁻,Dnz⁻,Np_surf,𝒪,Nm,C,ω,sources,isAdapt,isCSD,ΔE,𝚽E12_out,S⁻,S⁺,S,𝒲,𝒲₂,Tstr⁻,Tstr⁺,Tstr,isFC,𝚽x12_in,𝚽y12_in,𝚽z12_in,boundary_conditions,Np_source_eff)
         else
             error("Dimension is not 1, 2 or 3.")
         end
@@ -135,7 +135,6 @@ function sn_inner_pass!(𝚽l,𝚽x12_in,𝚽y12_in,𝚽z12_in,𝚽x12_temp,𝚽
 
     return 𝚽l
 end
-
 """
     _sn_fast_faces!(src,Mh,n,Np_surf,Nmfa,Nfca,𝚽12_in,slot,bc,sfc,Np_source,use_bc)
 

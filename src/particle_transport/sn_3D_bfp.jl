@@ -49,7 +49,7 @@ equation.
 N/A
 
 """
-function flux_3D_BFP(μ::Float64,η::Float64,ξ::Float64,Σt::Float64,S⁻::Float64,S⁺::Float64,S::Vector{Float64},ΔE::Float64,Δx::Float64,Δy::Float64,Δz::Float64,Qn::Vector{Float64},𝚽x12::Vector{Float64},𝚽y12::Vector{Float64},𝚽z12::Vector{Float64},𝚽E12::Vector{Float64},𝒪E::Int64,𝒪x::Int64,𝒪y::Int64,𝒪z::Int64,C::Vector{Float64},ωE::Array{Float64},ωx::Array{Float64},ωy::Array{Float64},ωz::Array{Float64},isAdapt::Bool,𝒲::Array{Float64},isFC::Bool)
+function flux_3D_BFP(μ::Float64,η::Float64,ξ::Float64,Σt::Float64,S⁻::Float64,S⁺::Float64,S::Vector{Float64},ΔE::Float64,Δx::Float64,Δy::Float64,Δz::Float64,Qn::Vector{Float64},𝚽x12::Vector{Float64},𝚽y12::Vector{Float64},𝚽z12::Vector{Float64},𝚽E12::Vector{Float64},𝒪E::Int64,𝒪x::Int64,𝒪y::Int64,𝒪z::Int64,C::Vector{Float64},ωE::Array{Float64},ωx::Array{Float64},ωy::Array{Float64},ωz::Array{Float64},isAdapt::Bool,𝒲::Array{Float64},𝒲₂::Array{Float64},Tstr⁻::Float64,Tstr⁺::Float64,Tstr::Vector{Float64},isFC::Bool)
 
 # Initialization
 sx = sign(μ)
@@ -110,6 +110,13 @@ for ix in range(1,𝒪x), jx in range(1,𝒪x), iy in range(1,𝒪y), jy in rang
             𝒮[i,j] += C[iE] * C[jE] * C[kE] * C[wE] * (1-(-1)^(iE-kE)) * S[wE] * 𝒲[jE,kE,wE]
         end
         𝒮[i,j] += C[iE] * S⁺ * (-1)^(iE-1) * C[jE] * (-1)^(jE-1) * ωE[jE+1,jx,jy,jz]
+    end
+
+    # Straggling term (second moment, heavy particles only)
+    if ix == jx && iy == jy && iz == jz
+        for wE in range(1,𝒪E)
+            𝒮[i,j] += C[iE] * C[jE] * C[wE] * Tstr[wE] * 𝒲₂[iE,jE,wE]
+        end
     end
 end
 

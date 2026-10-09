@@ -208,6 +208,8 @@ function in_distribution_dispatch(interaction::Interaction)
         return in_distribution(interaction)
     elseif itype == Inelastic_Collision
         return in_distribution(interaction)
+    elseif itype == Nuclear_Reaction
+        return in_distribution(interaction)
     elseif itype == Pair_Production
         return in_distribution(interaction)
     elseif itype == Photoelectric
@@ -247,6 +249,8 @@ function out_distribution_dispatch(interaction::Interaction,type::String)
     elseif itype == Elastic_Collision
         return out_distribution(interaction)
     elseif itype == Inelastic_Collision
+        return out_distribution(interaction)
+    elseif itype == Nuclear_Reaction
         return out_distribution(interaction)
     elseif itype == Pair_Production
         return out_distribution(interaction)
@@ -407,6 +411,8 @@ function tcs_dispatch(interaction::Interaction,Ei::Float64,Z::Int64,Ec::Float64,
         return tcs(interaction,Ei,Ec,particle,Z; A=A, atpercentA=atpercentA)
     elseif itype == Inelastic_Collision
         return tcs(interaction,Ei,Ec,particle,Z)
+    elseif itype == Nuclear_Reaction
+        return tcs(interaction,Ei,particle,Z; A=A, atpercentA=atpercentA)
     elseif itype == Pair_Production
         return tcs(interaction,Ei,Z,Eout)
     elseif itype == Photoelectric
@@ -479,8 +485,8 @@ Gives the stopping power.
 - `Ec::Float64` : cutoff energy between soft and catastrophic interactions.
 - `particle::Particle` : incoming particle.
 - `Eout::Vector{Float64}` : energy boundaries associated with outgoing particles.
-- `S_user::Dict{Type,String}` : per-particle user-supplied stopping-power tables. An input
-  to the collisional stopping power only: the Bremsstrahlung and Elastic_Scattering
+- `S_user::Dict{Type,String}` : per-particle user-supplied stopping-power tables. It is an
+  input to the collisional stopping power only: the Bremsstrahlung and Elastic_Scattering
   branches ignore it, because a user table replaces the inelastic-collision term and
   neither the radiative nor the nuclear one.
 
@@ -499,6 +505,39 @@ function sp_dispatch(interaction::Interaction,Z::Vector{Int64},ωz::Vector{Float
         return sp(interaction,Z,ωz,atz,ρ,N_density,state_of_matter,Ei,Ec,particle,I_eff,atomic_weights,S_user)
     else
         error("Unknown interaction.")
+    end
+end
+
+"""
+    strag_dispatch(interaction::Interaction,Z::Vector{Int64},ωz::Vector{Float64},ρ::Float64,
+    state_of_matter::String,Ei::Float64,Ec::Float64,particle::Particle,
+    Eout::Vector{Float64})
+
+Gives the soft straggling coefficient (second moment of the soft energy-loss distribution
+per unit path length). Only `Inelastic_Collision` contributes; every other interaction
+returns zero.
+
+# Input Argument(s)
+- `this::Interaction` : Interaction structure.
+- `Z::Vector{Int64}` : atomic numbers of the elements in the material.
+- `ωz::Vector{Float64}` : weight fraction of the elements composing the material.
+- `ρ::Float64` : material density.
+- `state_of_matter::String` : state of matter.
+- `Ei::Float64` : incoming particle energy.
+- `Ec::Float64` : cutoff energy between soft and catastrophic interactions.
+- `particle::Particle` : incoming particle.
+- `Eout::Vector{Float64}` : energy boundaries associated with outgoing particles.
+
+# Output Argument(s)
+- `Tsoft::Float64` : soft straggling coefficient [in (mₑc²)²/cm].
+
+"""
+function strag_dispatch(interaction::Interaction,Z::Vector{Int64},ωz::Vector{Float64},ρ::Float64,state_of_matter::String,Ei::Float64,Ec::Float64,particle::Particle,Eout::Vector{Float64})
+    itype = typeof(interaction)
+    if itype == Inelastic_Collision
+        return strag(interaction,Z,ωz,ρ,state_of_matter,Ei,Ec,particle)
+    else
+        return 0.0
     end
 end
 
@@ -528,7 +567,8 @@ function mt_dispatch(interaction::Interaction,Z::Int64,Ei::Float64,Ec::Float64,p
 end
 
 """
-    initialize_dispatch(interaction::Interaction, particles, isotopes::Vector{Tuple{Int,Int}})
+    initialize_dispatch(interaction::Interaction, particles, isotopes::Vector{Tuple{Int,Int}};
+    energy_boundaries::Union{Nothing,Vector{Vector{Float64}}}=nothing)
 
 Initializes interaction-specific data needed before multigroup cross-section generation.
 Elastic scattering initializes its ENDF database; other interactions perform no initialization.
@@ -537,13 +577,19 @@ Elastic scattering initializes its ENDF database; other interactions perform no 
 - `interaction::Interaction` : interaction structure.
 - `particles` : particle objects used in the simulation.
 - `isotopes::Vector{Tuple{Int,Int}}` : target isotope pairs required by initialized interactions.
+- `energy_boundaries::Union{Nothing,Vector{Vector{Float64}}}` : energy group boundaries of
+  each particle [MeV], in the same order as `particles`, used to check the energy range
+  covered by the tabulated data.
 
 # Output Argument(s)
 N/A
 """
-function initialize_dispatch(interaction::Interaction, particles, isotopes::Vector{Tuple{Int,Int}})
+function initialize_dispatch(interaction::Interaction, particles, isotopes::Vector{Tuple{Int,Int}};
+    energy_boundaries::Union{Nothing,Vector{Vector{Float64}}}=nothing)
     if interaction isa Elastic_Scattering
         initialize(interaction, particles, isotopes)
+    elseif interaction isa Nuclear_Reaction
+        initialize(interaction, particles, isotopes; energy_boundaries=energy_boundaries)
     end
     return nothing
 end

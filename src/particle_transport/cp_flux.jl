@@ -60,6 +60,7 @@ is_reflective = (βL != 0.0) || (βR != 0.0)
 # Solver / angular basis
 #----
 part = solver.get_particle()
+prepare_author_straggling(cross_sections,part,:CP,false)
 solver.get_solver_type()   # validates that the solver type is supported (BTE)
 Lp = solver.get_legendre_order()
 P = Lp+1
