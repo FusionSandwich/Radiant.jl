@@ -20,13 +20,24 @@ function author_nuclear_energy(E::Float64, grid, label::AbstractString; threshol
     return true
 end
 
+# ENDF stores integer identities in floating fields. Decode only representation
+# roundoff within eight Float64 ULPs, then compare the resulting integer exactly.
+function author_endf_integer(value::Float64, label::AbstractString)
+    isfinite(value) && typemin(Int) < value < typemax(Int) ||
+        error("$label: not a finite integer-coded identity.")
+    decoded = round(Int,value)
+    abs(value-Float64(decoded)) <= 8eps(Float64(decoded)) ||
+        error("$label: fractional/non-integer-coded identity $value.")
+    return decoded
+end
+
 function author_evaluation_identity(lines::Vector{String}, Z::Int, A::Int,
         particle::Particle, source::AbstractString)
     i = find_section_start(lines, 1, 451)
     isnothing(i) && error("$source: required MF1/MT451 projectile/target identity is absent.")
     (ZA, _, _, _, _, _, mat, mf, mt, _, i, _) = read_CONT(lines, i)
     validate_section_ids(mat, mf, mt, mat, 1, 451, "$source identity HEAD")
-    ZA == 1000*Z + A || error("$source: target ZA mismatch.")
+    author_endf_integer(ZA,"$source target ZA") == 1000*Z + A || error("$source: target ZA mismatch.")
     (_, _, _, _, _, _, mat2, mf2, mt2, _, i, _) = read_CONT(lines, i)
     validate_section_ids(mat2, mf2, mt2, mat, 1, 451, "$source identity second CONT")
     (_, _, _, _, NSUB, _, mat3, mf3, mt3, _, _, _) = read_CONT(lines, i)
@@ -41,7 +52,7 @@ function author_evaluation_identity(lines::Vector{String}, Z::Int, A::Int,
         if mfj in (3,6) && mtj > 0 && !((mfj,mtj) in seen)
             push!(seen,(mfj,mtj))
             (ZAj,AWRj,_,_,_,_,_,_,_,_,_,_) = read_CONT(lines,j)
-            ZAj == 1000*Z+A && isfinite(AWRj) && AWRj > 0.0 ||
+            author_endf_integer(ZAj,"$source MF$mfj MT$mtj target ZA") == 1000*Z+A && isfinite(AWRj) && AWRj > 0.0 ||
                 error("$source: MF$mfj MT$mtj target identity/mass mismatch.")
         end
     end

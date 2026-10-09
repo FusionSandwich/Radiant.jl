@@ -384,9 +384,8 @@ function nuclear_production_endf(db_name::String, isotopes::Vector{Tuple{Int,Int
             isempty(products) && error("Required MF6 MT=$mt has no products in $endf_path.")
 
             for prod in products
-                isfinite(prod.ZAP) && isinteger(prod.ZAP) || error("Invalid required product ZAP identity.")
+                ZAP_i = author_endf_integer(prod.ZAP,"Required product ZAP")
                 isfinite(prod.AWP) && prod.AWP > 0.0 || error("Invalid required product mass.")
-                ZAP_i = round(Int, prod.ZAP)
                 (ZAP_i ∈ _CHARGED_ZAPS || ZAP_i ∈ _NEUTRAL_ZAPS) ||
                     error("Unsupported required product ZAP=$ZAP_i in $endf_path MT=$mt.")
                 prod.LCT == 2 || error("Production requires MF6 CM frame LCT=2; got $(prod.LCT) in $endf_path MT=$mt.")
